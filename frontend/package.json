@@ -5,12 +5,15 @@
   "dependencies": {
     "ajv": "^8.18.0",
     "axios": "^1.6.0",
+    "daisyui": "^5.5.19",
     "date-fns": "^3.0.0",
+    "framer-motion": "^12.34.3",
     "react": "^18.2.0",
     "react-datepicker": "^4.25.0",
     "react-dom": "^18.2.0",
     "react-scripts": "5.0.1",
-    "react-select": "^5.8.0"
+    "react-select": "^5.8.0",
+    "recharts": "^3.7.0"
   },
   "scripts": {
     "start": "PORT=3000 react-scripts start",

@@ -1,184 +1,177 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import Select from 'react-select';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
+import { motion, AnimatePresence } from 'framer-motion';
 import './App.css';
-import StepWizard from './components/StepWizard';
-import ResultsTable from './components/ResultsTable';
-import ApiPanel from './components/ApiPanel';
-import LottoBall from './components/LottoBall';
 
-const API = '';  // relative — served from same origin
+/* ── Step components ── */
+import Step1_StateLottery from './components/Step1_StateLottery';
+import Step2_DateRange    from './components/Step2_DateRange';
+import Step3_Results      from './components/Step3_Results';
+import LottoBall          from './components/LottoBall';
 
-/* ─── helpers ─── */
-const fmtDate = d => (d instanceof Date ? d.toISOString().split('T')[0] : d);
+const API = '';  /* relative — CRA proxy → localhost:8000 */
+
+/* ── helpers ── */
+const fmtDate    = d => (d instanceof Date ? d.toISOString().split('T')[0] : d);
 const oneYearAgo = () => { const d = new Date(); d.setFullYear(d.getFullYear() - 1); return d; };
 
-/* ─── react-select styles factory ─── */
-const mkSelectStyles = (accent = '#7c3aed') => ({
-  control: (b, s) => ({
-    ...b,
-    background: 'rgba(255,255,255,0.04)',
-    border: `1px solid ${s.isFocused ? accent : 'rgba(255,255,255,0.09)'}`,
-    borderRadius: 10,
-    boxShadow: s.isFocused ? `0 0 0 3px ${accent}30` : 'none',
-    minHeight: 50,
-    cursor: 'pointer',
-    transition: 'all 0.2s',
-    '&:hover': { borderColor: accent },
-  }),
-  menu: b => ({
-    ...b,
-    background: '#10102a',
-    border: '1px solid rgba(124,58,237,0.25)',
-    borderRadius: 14,
-    boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
-    zIndex: 999,
-    overflow: 'hidden',
-  }),
-  option: (b, s) => ({
-    ...b,
-    background: s.isSelected ? accent : s.isFocused ? `${accent}28` : 'transparent',
-    color: '#fff',
-    cursor: 'pointer',
-    transition: 'background 0.15s',
-    padding: '10px 14px',
-  }),
-  singleValue: b => ({ ...b, color: '#fff' }),
-  multiValue: b => ({ ...b, background: `${accent}30`, borderRadius: 8, margin: '2px 4px' }),
-  multiValueLabel: b => ({ ...b, color: '#fff', padding: '2px 6px' }),
-  multiValueRemove: b => ({
-    ...b, color: 'rgba(255,255,255,0.7)', borderRadius: '0 8px 8px 0',
-    '&:hover': { background: accent, color: '#fff' }
-  }),
-  placeholder: b => ({ ...b, color: 'rgba(255,255,255,0.3)' }),
-  input: b => ({ ...b, color: '#fff' }),
-  groupHeading: b => ({
-    ...b, color: '#a78bfa', fontSize: 11, fontWeight: 700,
-    letterSpacing: 1, textTransform: 'uppercase', padding: '8px 14px 4px',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-  }),
-  group: b => ({ ...b, paddingTop: 0 }),
-  indicatorSeparator: () => ({ display: 'none' }),
-  dropdownIndicator: b => ({ ...b, color: 'rgba(255,255,255,0.35)', padding: '0 10px' }),
-  clearIndicator: b => ({ ...b, color: 'rgba(255,255,255,0.35)' }),
-  valueContainer: b => ({ ...b, padding: '4px 14px', gap: 4 }),
-  noOptionsMessage: b => ({ ...b, color: 'rgba(255,255,255,0.4)', fontSize: 13 }),
-});
-
-/* ─── Hero demo balls ─── */
+/* ── Hero demo balls ── */
 const DEMO_BALLS = [
-  { n: '07', t: 'white' }, { n: '14', t: 'white' }, { n: '32', t: 'white' },
-  { n: '45', t: 'white' }, { n: '61', t: 'white' }, { n: '20', t: 'powerball' },
+  { n: '07', t: 'white'     },
+  { n: '14', t: 'white'     },
+  { n: '32', t: 'white'     },
+  { n: '45', t: 'white'     },
+  { n: '61', t: 'white'     },
+  { n: '20', t: 'powerball' },
 ];
 
-/* ─── Stat Card ─── */
-function StatCard({ icon, value, label }) {
-  return (
-    <div className="stat-card">
-      <span className="stat-card__icon">{icon}</span>
-      <strong className="stat-card__value">{value}</strong>
-      <span className="stat-card__label">{label}</span>
-    </div>
-  );
-}
+/* ── Feature pills ── */
+const PILLS = [
+  { icon: '📍', text: 'Location-aware'  },
+  { icon: '🎟️', text: '46 US states'   },
+  { icon: '📅', text: '10+ yrs of data' },
+  { icon: '📥', text: 'CSV export'      },
+  { icon: '🔌', text: 'REST API'        },
+  { icon: '🔒', text: 'Real data only'  },
+];
 
-/* ─── Feature Pill ─── */
-function FeaturePill({ icon, text }) {
-  return (
-    <span className="feature-pill">
-      <span>{icon}</span>{text}
-    </span>
-  );
-}
+/* ── Step config ── */
+const STEPS = [
+  { num: 1, icon: '📍', label: 'State & Lotteries', desc: 'Choose your state and games' },
+  { num: 2, icon: '📅', label: 'Date Range',         desc: 'Set the extraction window' },
+  { num: 3, icon: '🚀', label: 'Extract & Analyze',  desc: 'View draws + analytics' },
+];
 
-/* ─── Toast ─── */
+/* ── Toast ── */
 function Toast({ msg, type, onClose }) {
   useEffect(() => {
     const t = setTimeout(onClose, 4500);
     return () => clearTimeout(t);
   }, [onClose]);
   return (
-    <div className={`toast toast--${type}`}>
+    <motion.div
+      className={`toast toast--${type}`}
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 24 }}
+    >
       <span>{msg}</span>
       <button className="toast__close" onClick={onClose}>×</button>
+    </motion.div>
+  );
+}
+
+/* ── Wizard Progress ── */
+function WizardProgress({ step, maxStep }) {
+  return (
+    <div className="wizard">
+      {STEPS.map((s, idx) => {
+        const done   = step > s.num;
+        const active = step === s.num;
+        return (
+          <React.Fragment key={s.num}>
+            <div className={`wizard__step${active ? ' is-active' : ''}${done ? ' is-done' : ''}`}>
+              <div className="wizard__bubble">
+                {done
+                  ? <span className="wizard__check">✓</span>
+                  : <span style={{ fontSize: 22 }}>{s.icon}</span>
+                }
+                {active && <span className="wizard__pulse" />}
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <span className="wizard__label">{s.label}</span>
+              </div>
+            </div>
+            {idx < STEPS.length - 1 && (
+              <div className={`wizard__line${done ? ' is-done' : ''}`} />
+            )}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   APP
+═══════════════════════════════════════════════════ */
 export default function App() {
   /* ── state ── */
   const [step, setStep] = useState(1);
-  const [allStates, setAllStates] = useState([]);
-  const [selectedState, setSelectedState] = useState(null);
+
+  /* Step 1 */
+  const [allStates,          setAllStates]          = useState([]);
+  const [selectedState,      setSelectedState]      = useState(null);
   const [availableLotteries, setAvailableLotteries] = useState([]);
-  const [selectedLotteries, setSelectedLotteries] = useState([]);
+  const [selectedLotteries,  setSelectedLotteries]  = useState([]);
+  const [detecting,          setDetecting]          = useState(true);
+  const [detectedState,      setDetectedState]      = useState(null);
+
+  /* Step 2 */
   const [fromDate, setFromDate] = useState(oneYearAgo);
-  const [toDate, setToDate] = useState(() => new Date());
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [csvLoading, setCsvLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [detecting, setDetecting] = useState(true);
-  const [detectedState, setDetectedState] = useState(null);
-  const [activeTab, setActiveTab] = useState('results');
-  const [toasts, setToasts] = useState([]);
+  const [toDate,   setToDate]   = useState(() => new Date());
+
+  /* Step 3 */
+  const [results,     setResults]     = useState(null);
+  const [loading,     setLoading]     = useState(false);
+  const [csvLoading,  setCsvLoading]  = useState(false);
+  const [error,       setError]       = useState(null);
+  const [toasts,      setToasts]      = useState([]);
+
   const resultsRef = useRef(null);
 
-  /* ── helpers ── */
-  const addToast = useCallback((msg, type = 'success') => {
+  /* ── Toast helpers ── */
+  const addToast    = useCallback((msg, type = 'success') => {
     const id = Date.now();
     setToasts(t => [...t, { id, msg, type }]);
   }, []);
   const removeToast = useCallback(id => setToasts(t => t.filter(x => x.id !== id)), []);
 
-  /* ── init: load states + detect location ── */
+  /* ── Init: load states + auto-detect ── */
   useEffect(() => {
-    axios.get(`${API}/lotteries/all-states`).then(r => {
-      setAllStates(r.data.states.filter(s => s.lottery_count > 0));
-    }).catch(() => {});
+    axios.get(`${API}/lotteries/all-states`)
+      .then(r => setAllStates(r.data.states.filter(s => s.lottery_count > 0)))
+      .catch(() => {});
 
-    axios.get(`${API}/lotteries/detect-location`).then(r => {
-      const d = r.data;
-      if (d.detected_state_code) {
-        const opt = {
-          value: d.detected_state_code,
-          label: `${d.detected_state_name} (${d.detected_state_code})`,
-        };
-        setDetectedState(opt);
-        setSelectedState(opt);
-        setAvailableLotteries(d.lotteries || []);
-        if ((d.lotteries || []).length > 0) setStep(2);
-      }
-    }).catch(() => {}).finally(() => setDetecting(false));
+    axios.get(`${API}/lotteries/detect-location`)
+      .then(r => {
+        const d = r.data;
+        if (d.detected_state_code) {
+          const opt = {
+            value: d.detected_state_code,
+            label: `${d.detected_state_name} (${d.detected_state_code})`,
+          };
+          setDetectedState(opt);
+          setSelectedState(opt);
+          setAvailableLotteries(d.lotteries || []);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setDetecting(false));
   }, []);
 
-  /* ── state change ── */
+  /* ── State change ── */
   const handleStateChange = async (opt) => {
     setSelectedState(opt);
     setSelectedLotteries([]);
     setResults(null);
     setError(null);
-    if (!opt) { setAvailableLotteries([]); setStep(1); return; }
+    if (!opt) { setAvailableLotteries([]); return; }
     try {
       const r = await axios.get(`${API}/lotteries/by-state/${opt.value}`);
       setAvailableLotteries(r.data.lotteries || []);
-      setStep(2);
     } catch {
       setError(`Could not load lotteries for ${opt.label}`);
     }
   };
 
-  /* ── lottery change ── */
+  /* ── Lottery change ── */
   const handleLotteryChange = (sel) => {
     setSelectedLotteries(sel || []);
-    setStep((sel || []).length > 0 ? 3 : 2);
     setResults(null);
   };
 
-  /* ── extract ── */
+  /* ── Extract ── */
   const handleExtract = async () => {
     if (!selectedState || !selectedLotteries.length) return;
     setLoading(true);
@@ -186,21 +179,22 @@ export default function App() {
     setResults(null);
     try {
       const r = await axios.post(`${API}/extract`, {
-        state_code: selectedState.value,
+        state_code:  selectedState.value,
         lottery_ids: selectedLotteries.map(l => l.value),
-        from_date: fmtDate(fromDate),
-        to_date: fmtDate(toDate),
+        from_date:   fmtDate(fromDate),
+        to_date:     fmtDate(toDate),
       });
       setResults(r.data);
-      setStep(4);
-      setActiveTab('results');
+      setStep(3);
       addToast(`✓ Found ${r.data.total_records} real lottery draws`, 'success');
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 200);
     } catch (e) {
       const msg = e.response?.data?.detail || e.message;
       setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
       addToast('⚠️ Extraction failed — see details below', 'error');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ── CSV download ── */
@@ -208,17 +202,17 @@ export default function App() {
     if (!selectedState || !selectedLotteries.length) return;
     setCsvLoading(true);
     const params = new URLSearchParams({
-      state_code: selectedState.value,
+      state_code:  selectedState.value,
       lottery_ids: selectedLotteries.map(l => l.value).join(','),
-      from_date: fmtDate(fromDate),
-      to_date: fmtDate(toDate),
+      from_date:   fmtDate(fromDate),
+      to_date:     fmtDate(toDate),
     });
     try {
       const r = await axios.get(`${API}/extract/csv?${params}`, { responseType: 'blob' });
-      const cd = r.headers['content-disposition'] || '';
+      const cd       = r.headers['content-disposition'] || '';
       const filename = cd.match(/filename="?([^"]+)"?/)?.[1] || 'lotto_results.csv';
       const url = URL.createObjectURL(new Blob([r.data], { type: 'text/csv' }));
-      const a = document.createElement('a');
+      const a   = document.createElement('a');
       a.href = url; a.download = filename; a.click();
       URL.revokeObjectURL(url);
       addToast(`📥 ${filename} saved`, 'success');
@@ -227,63 +221,193 @@ export default function App() {
         ? 'No data found for that selection and range'
         : (e.message || 'Download failed');
       addToast(`⚠️ ${msg}`, 'error');
-    } finally { setCsvLoading(false); }
+    } finally {
+      setCsvLoading(false);
+    }
   };
 
-  /* ── Select options ── */
-  const stateOptions = allStates.map(s => ({
-    value: s.state_code,
-    label: `${s.state_name} (${s.state_code})`,
-  }));
+  /* ── Derived ── */
+  const canProceed  = !!(selectedState && selectedLotteries.length > 0);
+  const canExtract  = canProceed;
 
-  const lotteryOptions = [
-    {
-      label: '🌐 Multi-State',
-      options: availableLotteries
-        .filter(l => l.type === 'multistate')
-        .map(l => ({ value: l.id, label: l.name, type: l.type })),
-    },
-    {
-      label: '🏛️ State-Specific',
-      options: availableLotteries
-        .filter(l => l.type === 'state')
-        .map(l => ({ value: l.id, label: l.name, type: l.type })),
-    },
-  ].filter(g => g.options.length > 0);
+  /* ── Navigation helpers ── */
+  const goNext = () => setStep(s => Math.min(3, s + 1));
+  const goBack = () => setStep(s => Math.max(1, s - 1));
 
-  /* ── quick-select helpers ── */
-  const selectAllMultistate = () => {
-    const ms = availableLotteries
-      .filter(l => l.type === 'multistate')
-      .map(l => ({ value: l.id, label: l.name, type: l.type }));
-    handleLotteryChange(ms);
+  /* ── Step panel content ── */
+  const stepContent = {
+    1: (
+      <Step1_StateLottery
+        allStates={allStates}
+        selectedState={selectedState}
+        onStateChange={handleStateChange}
+        availableLotteries={availableLotteries}
+        selectedLotteries={selectedLotteries}
+        onLotteryChange={handleLotteryChange}
+        detecting={detecting}
+        detectedState={detectedState}
+      />
+    ),
+    2: (
+      <Step2_DateRange
+        fromDate={fromDate}
+        setFromDate={setFromDate}
+        toDate={toDate}
+        setToDate={setToDate}
+        selectedLotteries={selectedLotteries}
+        disabled={!canProceed}
+      />
+    ),
+    3: (
+      <div>
+        {/* ── Extract / Summary panel (always visible in step 3) ── */}
+        {!results && !loading && (
+          <div>
+            <div className="step-panel__header">
+              <div className="step-panel__icon" style={{ fontSize: 26 }}>🚀</div>
+              <div>
+                <div className="step-panel__title">Extract Real Data</div>
+                <div className="step-panel__sub">Scrape live from official lottery sources</div>
+              </div>
+            </div>
+
+            {canExtract && (
+              <div className="extract-summary-card">
+                <div className="extract-summary-item">
+                  <span className="extract-summary-icon">📍</span>
+                  <div>
+                    <div className="extract-summary-label">State</div>
+                    <div className="extract-summary-val">{selectedState?.label}</div>
+                  </div>
+                </div>
+                <div className="extract-summary-item">
+                  <span className="extract-summary-icon">🎟️</span>
+                  <div>
+                    <div className="extract-summary-label">Lotteries</div>
+                    <div className="extract-summary-val">{selectedLotteries.map(l => l.label).join(' · ')}</div>
+                  </div>
+                </div>
+                <div className="extract-summary-item">
+                  <span className="extract-summary-icon">📅</span>
+                  <div>
+                    <div className="extract-summary-label">Date Range</div>
+                    <div className="extract-summary-val">{fmtDate(fromDate)} → {fmtDate(toDate)}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <button
+              className="btn-extract"
+              onClick={handleExtract}
+              disabled={loading || !canExtract}
+            >
+              {loading
+                ? <><span className="btn-spinner" /> Fetching real draws…</>
+                : '🔍 Extract Results'
+              }
+            </button>
+
+            <button
+              className="btn-csv"
+              onClick={handleCSV}
+              disabled={csvLoading || !canExtract}
+            >
+              {csvLoading
+                ? <><span className="btn-spinner" /> Building CSV…</>
+                : '📥 Download CSV'
+              }
+            </button>
+
+            {!canExtract && (
+              <p style={{ marginTop: 12, fontSize: 13, color: 'var(--text-d)', textAlign: 'center' }}>
+                ← Go back to complete Step 1 and Step 2
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Loading state */}
+        {loading && (
+          <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>⏳</div>
+            <div style={{ fontFamily: 'var(--font-head)', fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+              Extracting lottery draws…
+            </div>
+            <div style={{ fontSize: 14, color: 'var(--text-m)' }}>
+              Fetching from official sources — this may take a few seconds
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, gap: 8 }}>
+              {[0,1,2].map(i => (
+                <motion.div
+                  key={i}
+                  style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--purple)' }}
+                  animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && !loading && (
+          <div className="error-banner">
+            <span className="error-banner__icon">⚠️</span>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#fca5a5' }}>Extraction Error</strong>
+              <p style={{ fontSize: 13, color: 'rgba(252,165,165,0.8)', marginTop: 4 }}>{error}</p>
+            </div>
+            <button className="error-banner__close" onClick={() => setError(null)}>×</button>
+          </div>
+        )}
+
+        {/* Results dashboard */}
+        {results && !loading && (
+          <div ref={resultsRef}>
+            <Step3_Results
+              results={results}
+              selectedState={selectedState}
+              selectedLotteries={selectedLotteries}
+              fromDate={fromDate}
+              toDate={toDate}
+              onCSV={handleCSV}
+              csvLoading={csvLoading}
+            />
+
+            {/* Re-extract option */}
+            <div style={{ marginTop: 24, display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                className="btn-back"
+                onClick={() => { setResults(null); setError(null); }}
+                style={{ fontSize: 13 }}
+              >
+                🔄 New Extraction
+              </button>
+              <button
+                className="btn-csv"
+                onClick={handleCSV}
+                disabled={csvLoading}
+                style={{ width: 'auto', padding: '10px 20px', fontSize: 13 }}
+              >
+                {csvLoading ? '⏳ Building…' : '📥 Download CSV'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    ),
   };
-  const selectAll = () => {
-    handleLotteryChange(availableLotteries.map(l => ({ value: l.id, label: l.name, type: l.type })));
-  };
-  const clearLotteries = () => handleLotteryChange([]);
-
-  /* ── range shortcuts ── */
-  const setRange = (days) => {
-    const to = new Date();
-    const from = new Date();
-    from.setDate(from.getDate() - days);
-    setFromDate(from);
-    setToDate(to);
-  };
-
-  const dayRange = Math.max(0, Math.ceil((toDate - fromDate) / 86400000));
-  const estDraws = Math.round(dayRange / 3.5 * selectedLotteries.length);
-  const canExtract = !!(selectedState && selectedLotteries.length > 0);
-  const lotteryCount = allStates.find(s => s.state_code === selectedState?.value)?.lottery_count || 0;
 
   return (
-    <div className="app">
+    <div className="app" data-theme="lotto">
       {/* ── Toast Stack ── */}
       <div className="toast-stack">
-        {toasts.map(t => (
-          <Toast key={t.id} msg={t.msg} type={t.type} onClose={() => removeToast(t.id)} />
-        ))}
+        <AnimatePresence>
+          {toasts.map(t => (
+            <Toast key={t.id} msg={t.msg} type={t.type} onClose={() => removeToast(t.id)} />
+          ))}
+        </AnimatePresence>
       </div>
 
       {/* ══════════ HEADER ══════════ */}
@@ -313,411 +437,156 @@ export default function App() {
 
       {/* ══════════ HERO ══════════ */}
       <section className="hero">
-        {/* Floating decoration orbs */}
         <div className="hero__orb hero__orb--1" aria-hidden="true" />
         <div className="hero__orb hero__orb--2" aria-hidden="true" />
-
         <div className="hero__inner">
-          <div className="hero__badge">
+          <motion.div
+            className="hero__badge"
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
             🛡️ &nbsp;Official sources only · 46 US states
-          </div>
+          </motion.div>
 
-          <h2 className="hero__title">
+          <motion.h2
+            className="hero__title"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
             Extract <span className="gradient-text">Real Lottery</span><br />Results Instantly
-          </h2>
+          </motion.h2>
 
-          <p className="hero__sub">
+          <motion.p
+            className="hero__sub"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
             Powered by lotto.net archive and NY Open Data API.
             Every number is a real historical draw — zero randomness, zero fakes.
-          </p>
+          </motion.p>
 
           {/* Animated lottery balls */}
-          <div className="hero__drum">
+          <motion.div
+            className="hero__drum"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+          >
             {DEMO_BALLS.map((b, i) => (
-              <LottoBall key={i} number={b.n} type={b.t} size="lg" animate />
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + i * 0.07 }}
+              >
+                <LottoBall number={b.n} type={b.t} size="lg" animate />
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
 
           {/* Feature pills */}
-          <div className="hero__pills">
-            <FeaturePill icon="📍" text="Location-aware" />
-            <FeaturePill icon="🎟️" text="46 US states" />
-            <FeaturePill icon="📅" text="10+ years of data" />
-            <FeaturePill icon="📥" text="CSV export" />
-            <FeaturePill icon="🔌" text="REST API included" />
-            <FeaturePill icon="🔒" text="Real data only" />
-          </div>
+          <motion.div
+            className="hero__pills"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.7 }}
+          >
+            {PILLS.map((p, i) => (
+              <span key={i} className="feature-pill">
+                <span>{p.icon}</span>{p.text}
+              </span>
+            ))}
+          </motion.div>
         </div>
       </section>
 
-      {/* ══════════ WIZARD + CARDS ══════════ */}
+      {/* ══════════ WIZARD ══════════ */}
       <main className="main-content">
-        <StepWizard currentStep={step} />
+        <WizardProgress step={step} maxStep={3} />
 
-        <div className="cards-grid">
+        {/* ── Step panel ── */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            className={`step-panel ${step <= 2 ? 'step-panel--active' : ''}`}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            style={{ maxWidth: 840, margin: '0 auto' }}
+          >
+            {stepContent[step]}
 
-          {/* ─── Step 1: Choose State ─── */}
-          <div className={`card ${step >= 1 ? 'card--active' : ''}`}>
-            <div className="card__head">
-              <div className="card__icon-wrap">📍</div>
-              <div>
-                <h2 className="card__title">Choose Your State</h2>
-                {detecting ? (
-                  <p className="card__sub card__sub--detecting">
-                    <span className="spinner-sm" />
-                    Detecting your location…
-                  </p>
-                ) : detectedState ? (
-                  <p className="card__sub card__sub--detected">
-                    ✅ Auto-detected: <strong>{detectedState.label}</strong>
-                  </p>
+            {/* ── Wizard nav ── */}
+            <div className="wizard-nav">
+              <button
+                className="btn-back"
+                onClick={goBack}
+                disabled={step === 1}
+              >
+                ← Back
+              </button>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Step indicator */}
+                <span style={{ fontSize: 12, color: 'var(--text-d)' }}>
+                  Step {step} of 3
+                </span>
+
+                {step < 3 ? (
+                  <button
+                    className="btn-next"
+                    onClick={step === 2 ? () => { setStep(3); } : goNext}
+                    disabled={step === 1 && !canProceed}
+                  >
+                    {step === 1 && !canProceed
+                      ? 'Select a state & lottery first'
+                      : step === 2
+                        ? 'Review & Extract →'
+                        : 'Next →'
+                    }
+                  </button>
                 ) : (
-                  <p className="card__sub">Search or pick any US state to begin</p>
-                )}
-              </div>
-            </div>
-
-            <div className="card__body">
-              {!detecting && detectedState && selectedState?.value === detectedState?.value && (
-                <div className="state-detected-banner">
-                  <span>📍 Using your detected location: <strong>{detectedState.label}</strong></span>
-                </div>
-              )}
-
-              <Select
-                options={stateOptions}
-                value={selectedState}
-                onChange={handleStateChange}
-                placeholder="🔍  Search by state name or abbreviation…"
-                isClearable
-                isSearchable
-                styles={mkSelectStyles('#7c3aed')}
-                noOptionsMessage={() => 'No states found'}
-              />
-
-              {selectedState && (
-                <div className="state-info-row">
-                  <span className="info-chip">
-                    🎟️ {lotteryCount} {lotteryCount === 1 ? 'lottery' : 'lotteries'} available
-                  </span>
-                  <button
-                    className="clear-link"
-                    onClick={() => {
-                      setSelectedState(null);
-                      setAvailableLotteries([]);
-                      setSelectedLotteries([]);
-                      setStep(1);
-                    }}
-                  >
-                    Clear ×
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ─── Step 2: Select Lotteries ─── */}
-          <div className={`card ${step >= 2 ? 'card--active' : 'card--locked'}`}>
-            <div className="card__head">
-              <div className="card__icon-wrap">🎟️</div>
-              <div>
-                <h2 className="card__title">Select Lotteries</h2>
-                <p className="card__sub">
-                  {step < 2
-                    ? 'Complete step 1 first'
-                    : `${availableLotteries.length} lotteries — pick one or more`}
-                </p>
-              </div>
-            </div>
-
-            <div className="card__body">
-              {step >= 2 && availableLotteries.length > 0 && (
-                <div className="quick-select-row">
-                  <button className="qs-btn" onClick={selectAllMultistate}>
-                    🌐 All Multi-State
-                  </button>
-                  <button className="qs-btn" onClick={selectAll}>
-                    ✅ Select All
-                  </button>
-                  {selectedLotteries.length > 0 && (
-                    <button className="qs-btn qs-btn--clear" onClick={clearLotteries}>
-                      ✕ Clear
+                  !results && !loading && (
+                    <button
+                      className="btn-next"
+                      onClick={handleExtract}
+                      disabled={loading || !canExtract}
+                    >
+                      {loading ? '⏳ Extracting…' : '🔍 Extract Now'}
                     </button>
-                  )}
-                </div>
-              )}
-
-              <Select
-                isMulti
-                options={lotteryOptions}
-                value={selectedLotteries}
-                onChange={handleLotteryChange}
-                isDisabled={step < 2}
-                placeholder={step < 2 ? '← Select a state first' : '🔍  Search lotteries…'}
-                closeMenuOnSelect={false}
-                hideSelectedOptions={false}
-                styles={mkSelectStyles('#f59e0b')}
-                formatOptionLabel={opt => (
-                  <div className="lottery-opt">
-                    <span className="lottery-opt__icon">
-                      {opt.type === 'multistate' ? '🌐' : '🏛️'}
-                    </span>
-                    <span className="lottery-opt__name">{opt.label}</span>
-                    <span className={`type-badge type-badge--${opt.type}`}>
-                      {opt.type}
-                    </span>
-                  </div>
+                  )
                 )}
-              />
-
-              {selectedLotteries.length > 0 && (
-                <div className="selected-chips">
-                  {selectedLotteries.map(l => (
-                    <span key={l.value} className={`sel-chip sel-chip--${l.type}`}>
-                      {l.type === 'multistate' ? '🌐' : '🏛️'} {l.label}
-                      <button
-                        className="sel-chip__x"
-                        onClick={() => handleLotteryChange(selectedLotteries.filter(x => x.value !== l.value))}
-                        title={`Remove ${l.label}`}
-                      >×</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ─── Step 3: Date Range ─── */}
-          <div className={`card ${step >= 3 ? 'card--active' : 'card--locked'}`}>
-            <div className="card__head">
-              <div className="card__icon-wrap">📅</div>
-              <div>
-                <h2 className="card__title">Date Range</h2>
-                <p className="card__sub">
-                  {step < 3 ? 'Select lotteries first' : 'Filter by draw date'}
-                </p>
               </div>
             </div>
+          </motion.div>
+        </AnimatePresence>
 
-            <div className="card__body">
-              {/* Quick range shortcuts */}
-              <div className="range-shortcuts">
-                {[
-                  { label: '30 days', days: 30 },
-                  { label: '90 days', days: 90 },
-                  { label: '6 months', days: 180 },
-                  { label: '1 year', days: 365 },
-                  { label: '2 years', days: 730 },
-                ].map(r => (
-                  <button
-                    key={r.label}
-                    className="range-btn"
-                    onClick={() => setRange(r.days)}
-                    disabled={step < 3}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Date pickers */}
-              <div className="date-inputs">
-                <div className="date-field">
-                  <label className="date-label">From Date</label>
-                  <DatePicker
-                    selected={fromDate}
-                    onChange={d => { setFromDate(d); if (step < 3) setStep(3); }}
-                    selectsStart
-                    startDate={fromDate}
-                    endDate={toDate}
-                    maxDate={toDate}
-                    dateFormat="yyyy-MM-dd"
-                    className="date-inp"
-                    disabled={step < 3}
-                    showYearDropdown
-                    showMonthDropdown
-                    scrollableYearDropdown
-                    yearDropdownItemNumber={30}
-                    placeholderText="Start date…"
-                  />
-                </div>
-
-                <div className="date-arrow-col">
-                  <div className="date-arrow">→</div>
-                </div>
-
-                <div className="date-field">
-                  <label className="date-label">To Date</label>
-                  <DatePicker
-                    selected={toDate}
-                    onChange={d => { setToDate(d); if (step < 3) setStep(3); }}
-                    selectsEnd
-                    startDate={fromDate}
-                    endDate={toDate}
-                    minDate={fromDate}
-                    maxDate={new Date()}
-                    dateFormat="yyyy-MM-dd"
-                    className="date-inp"
-                    disabled={step < 3}
-                    showYearDropdown
-                    showMonthDropdown
-                    scrollableYearDropdown
-                    yearDropdownItemNumber={30}
-                    placeholderText="End date…"
-                  />
-                </div>
-              </div>
-
-              {step >= 3 && dayRange > 0 && (
-                <div className="range-summary">
-                  📊 <strong>{dayRange}</strong> day range
-                  &nbsp;·&nbsp;
-                  ~<strong>{estDraws}</strong> estimated draws
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ─── Step 4: Extract ─── */}
-          <div className="card card--action">
-            <div className="card__head">
-              <div className="card__icon-wrap">🚀</div>
-              <div>
-                <h2 className="card__title">Extract Real Data</h2>
-                <p className="card__sub">Scrape live from official lottery sources</p>
-              </div>
-            </div>
-
-            <div className="card__body">
-              {canExtract && (
-                <div className="extract-summary">
-                  <div className="extract-summary__item">
-                    <span className="extract-summary__icon">📍</span>
-                    <span className="extract-summary__val">{selectedState?.label}</span>
-                  </div>
-                  <div className="extract-summary__item">
-                    <span className="extract-summary__icon">🎟️</span>
-                    <span className="extract-summary__val">
-                      {selectedLotteries.map(l => l.label).join(' · ')}
-                    </span>
-                  </div>
-                  <div className="extract-summary__item">
-                    <span className="extract-summary__icon">📅</span>
-                    <span className="extract-summary__val">
-                      {fmtDate(fromDate)} → {fmtDate(toDate)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              <div className="extract-btns">
-                <button
-                  className="btn btn--primary"
-                  onClick={handleExtract}
-                  disabled={loading || !canExtract}
-                >
-                  {loading ? (
-                    <><span className="btn-spinner" /> Fetching real draws…</>
-                  ) : (
-                    '🔍 Extract Results'
-                  )}
-                </button>
-
-                <button
-                  className="btn btn--csv"
-                  onClick={handleCSV}
-                  disabled={csvLoading || !canExtract}
-                >
-                  {csvLoading ? (
-                    <><span className="btn-spinner" /> Building CSV…</>
-                  ) : (
-                    '📥 Download CSV'
-                  )}
-                </button>
-              </div>
-
-              {!canExtract && (
-                <p className="extract-hint">
-                  Complete steps 1 → 2 → 3 above to unlock extraction
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Error ── */}
-        {error && (
-          <div className="error-banner">
+        {/* ── Error banner outside step panel ── */}
+        {error && step !== 3 && (
+          <motion.div
+            className="error-banner"
+            style={{ maxWidth: 840, margin: '16px auto 0' }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
             <span className="error-banner__icon">⚠️</span>
-            <div>
-              <strong>Extraction Error</strong>
-              <p>{error}</p>
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: '#fca5a5' }}>Error</strong>
+              <p style={{ fontSize: 13, marginTop: 4 }}>{error}</p>
             </div>
             <button className="error-banner__close" onClick={() => setError(null)}>×</button>
-          </div>
-        )}
-
-        {/* ══════════ RESULTS ══════════ */}
-        {results && (
-          <section className="results-section" ref={resultsRef}>
-
-            {/* Stats bar */}
-            <div className="results-stats">
-              <StatCard icon="🗂️" value={results.total_records.toLocaleString()} label="Total Draws" />
-              <StatCard icon="🎟️" value={results.lotteries.length} label="Lotteries" />
-              <StatCard icon="📍" value={results.state_name} label="State" />
-              <StatCard icon="📅" value={`${dayRange}d`} label="Date Span" />
-            </div>
-
-            {/* Tabs */}
-            <div className="results-tabs">
-              <button
-                className={`rtab ${activeTab === 'results' ? 'rtab--active' : ''}`}
-                onClick={() => setActiveTab('results')}
-              >
-                📋 Results
-                <span className="rtab__count">{results.total_records}</span>
-              </button>
-              <button
-                className={`rtab ${activeTab === 'api' ? 'rtab--active' : ''}`}
-                onClick={() => setActiveTab('api')}
-              >
-                🔌 API Reference
-              </button>
-              <button
-                className="rtab rtab--dl"
-                onClick={handleCSV}
-                disabled={csvLoading}
-                title="Download as CSV"
-              >
-                {csvLoading ? '⏳ Building…' : '📥 Download CSV'}
-              </button>
-            </div>
-
-            {/* Tab content */}
-            <div className="results-body">
-              {activeTab === 'results' && (
-                <ResultsTable data={results.data} lotteries={results.lotteries} />
-              )}
-              {activeTab === 'api' && (
-                <ApiPanel
-                  state={selectedState}
-                  lotteries={selectedLotteries}
-                  fromDate={fromDate}
-                  toDate={toDate}
-                />
-              )}
-            </div>
-          </section>
+          </motion.div>
         )}
       </main>
 
       {/* ══════════ FOOTER ══════════ */}
       <footer className="site-footer">
         <div className="site-footer__inner">
-          <span className="footer-brand">
-            🎰 Lotto Extraction &mdash; Real data only. Zero fake numbers.
-          </span>
+          <span>🎰 Lotto Extraction — Real data only. Zero fake numbers.</span>
           <span>
             Sources:&nbsp;
             <a href="https://data.ny.gov" target="_blank" rel="noreferrer">NY Open Data</a>

@@ -131,9 +131,9 @@ async def get_state_from_ip(ip: str) -> Optional[str]:
 # API Routes
 # ──────────────────────────────────────────────
 
-@app.get("/", tags=["Info"])
+@app.get("/api/info", tags=["Info"])
 async def root():
-    """API root - returns API info and available endpoints."""
+    """API info - returns API info and available endpoints."""
     return {
         "name": "Lotto Extraction API",
         "version": "1.0.0",
@@ -569,15 +569,25 @@ if FRONTEND_BUILD.exists():
         async def favicon():
             return FileResponse(str(favicon_path))
 
-    # SPA fallback - serve index.html for any non-API route
+    # Root → serve React frontend
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        index_file = FRONTEND_BUILD / "index.html"
+        return FileResponse(str(index_file))
+
+    # SPA fallback — serve index.html for all non-API paths
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        # Only serve index.html for non-API paths
-        if not full_path.startswith(("api/", "extract", "lotteries", "health", "docs", "redoc", "openapi")):
-            index_file = FRONTEND_BUILD / "index.html"
-            if index_file.exists():
-                return FileResponse(str(index_file))
-        raise HTTPException(status_code=404, detail=f"Path not found: {full_path}")
+        API_PREFIXES = (
+            "extract", "lotteries", "health", "docs", "redoc",
+            "openapi", "api/", "static/",
+        )
+        if any(full_path.startswith(p) for p in API_PREFIXES):
+            raise HTTPException(status_code=404, detail=f"API path not found: /{full_path}")
+        index_file = FRONTEND_BUILD / "index.html"
+        if index_file.exists():
+            return FileResponse(str(index_file))
+        raise HTTPException(status_code=404, detail="Frontend not built")
 
 
 if __name__ == "__main__":
