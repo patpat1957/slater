@@ -16,7 +16,7 @@
     "recharts": "^3.7.0"
   },
   "scripts": {
-    "start": "PORT=3000 react-scripts start",
+    "start": "PORT=3010 react-scripts start",
     "build": "react-scripts build"
   },
   "browserslist": {
