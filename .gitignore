@@ -1,0 +1,17 @@
+# Node modules and cache
+frontend/node_modules/
+backend/__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+.env.local
+
+# Build artifacts (keep build/ but ignore source maps)
+frontend/build/static/js/*.map
+frontend/build/static/css/*.map
+
+# OS
+.DS_Store
+Thumbs.db
