@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# Node / test tooling
+node_modules/
+frontend/node_modules/
+frontend/src/
+frontend/public/
+*.js
+!proxy-server.js
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Screenshots and test files
+*.png
+*.jpg
+*.pdf
+test_*.js
+check_*.js
+debug_*.js
+verify_*.js
+mobile_*.js
+
+# Documentation (not needed at runtime)
+*.md
+!README.md
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Misc
+core
+*.log
+.pytest_cache/

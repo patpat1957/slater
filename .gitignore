@@ -8,6 +8,7 @@ backend/__pycache__/
 # Environment
 .env
 .env.local
+.env.*
 
 # Build artifacts (keep build/ but ignore source maps)
 frontend/build/static/js/*.map
@@ -16,10 +17,33 @@ frontend/build/static/css/*.map
 # OS
 .DS_Store
 Thumbs.db
+
+# Logs
 backend/server.log
 server.log
+*.log
+
+# Dev-only files
 serve.py
 package.json
 package-lock.json
 
+# Core dump
 core
+
+# Test screenshots and artifacts
+*.png
+*.jpg
+*.pdf
+!frontend/build/**/*.png
+!frontend/public/**/*.png
+
+# Test scripts (root-level)
+test_*.js
+check_*.js
+debug_*.js
+verify_*.js
+mobile_*.js
+
+# Pytest
+.pytest_cache/
