@@ -5,8 +5,18 @@ import React from 'react';
  * type: 'white' | 'powerball' | 'mega' | 'bonus' | 'cashball'
  * size: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
  */
+// Pick-style games return single-digit values (0-9) from the API already formatted correctly.
+// We only zero-pad if the value is 2+ digits (regular lotto games like Powerball, Fantasy 5, etc.)
+function formatBall(number) {
+  const s = String(number).trim();
+  // If the backend already sent a single digit (pick game), keep it as-is
+  if (s.length <= 1) return s;
+  // Otherwise zero-pad to 2 digits (regular lotto)
+  return s.padStart(2, '0');
+}
+
 export default function LottoBall({ number, type = 'white', size = 'md', animate = false }) {
-  const num = String(number).padStart(2, '0');
+  const num = formatBall(number);
   return (
     <span
       className={`lball lball--${type} lball--${size}${animate ? ' lball--pop' : ''}`}

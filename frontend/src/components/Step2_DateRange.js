@@ -3,6 +3,12 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import { motion } from 'framer-motion';
 
+/* Shared popper modifiers — render in fixed position so it escapes overflow:hidden parents */
+const POPPER_PROPS = {
+  strategy: 'fixed',
+  modifiers: [{ name: 'offset', options: { offset: [0, 8] } }],
+};
+
 const RANGE_SHORTCUTS = [
   { label: '30d',   days: 30,  tip: 'Last 30 days' },
   { label: '90d',   days: 90,  tip: 'Last 90 days' },
@@ -104,6 +110,8 @@ export default function Step2_DateRange({
             scrollableYearDropdown
             yearDropdownItemNumber={30}
             placeholderText="Start date…"
+            popperProps={POPPER_PROPS}
+            popperPlacement="bottom-start"
           />
         </div>
 
@@ -129,6 +137,8 @@ export default function Step2_DateRange({
             scrollableYearDropdown
             yearDropdownItemNumber={30}
             placeholderText="End date…"
+            popperProps={POPPER_PROPS}
+            popperPlacement="bottom-start"
           />
         </div>
       </div>

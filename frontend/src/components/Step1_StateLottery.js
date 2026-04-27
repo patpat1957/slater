@@ -17,13 +17,14 @@ const mkSelectStyles = (accent = '#7c3aed') => ({
   }),
   menu: b => ({
     ...b,
-    background: '#10102a',
-    border: '1px solid rgba(124,58,237,0.25)',
+    background: '#1a1a3e',
+    border: '1px solid rgba(124,58,237,0.35)',
     borderRadius: 14,
-    boxShadow: '0 20px 60px rgba(0,0,0,0.7)',
-    zIndex: 999,
+    boxShadow: '0 20px 60px rgba(0,0,0,0.85)',
+    zIndex: 99999,
     overflow: 'hidden',
   }),
+  menuPortal: b => ({ ...b, zIndex: 99999 }),
   option: (b, s) => ({
     ...b,
     background: s.isSelected ? accent : s.isFocused ? `${accent}28` : 'transparent',
@@ -221,6 +222,8 @@ export default function Step1_StateLottery({
         styles={mkSelectStyles('#7c3aed')}
         noOptionsMessage={() => 'No states found'}
         className="select-container"
+        menuPortalTarget={document.body}
+        menuPosition="fixed"
       />
 
       {/* ── Lottery Selection ── */}

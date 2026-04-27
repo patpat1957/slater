@@ -4,10 +4,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import './App.css';
 
 /* ── Step components ── */
-import Step1_StateLottery from './components/Step1_StateLottery';
-import Step2_DateRange    from './components/Step2_DateRange';
-import Step3_Results      from './components/Step3_Results';
-import LottoBall          from './components/LottoBall';
+import Step1_StateLottery   from './components/Step1_StateLottery';
+import Step2_DateRange      from './components/Step2_DateRange';
+import Step3_Results        from './components/Step3_Results';
+import LottoBall            from './components/LottoBall';
+import UniversalPredictor   from './components/UniversalPredictor';
+
+/* ── Monetization ── */
+import { MonetizationProvider, useMonetization } from './components/MonetizationContext';
+import PricingPage      from './components/PricingPage';
+import UpgradeModal     from './components/UpgradeModal';
+import PlanBadge        from './components/PlanBadge';
+import AdBanner         from './components/AdBanner';
+import StripeCheckout   from './components/StripeCheckout';
+import CheckoutSuccess  from './components/CheckoutSuccess';
 
 const API = '';  /* relative — CRA proxy → localhost:8000 */
 
@@ -96,6 +106,41 @@ function WizardProgress({ step, maxStep }) {
    APP
 ═══════════════════════════════════════════════════ */
 export default function App() {
+  return (
+    <MonetizationProvider>
+      <AppInner />
+    </MonetizationProvider>
+  );
+}
+
+function AppInner() {
+  const {
+    showPricing, setShowPricing,
+    pendingCheckout, setPendingCheckout,
+    checkoutSuccess, setCheckoutSuccess,
+    activatePlan, mockUpgrade,
+  } = useMonetization();
+
+  /* ── top-level mode ── */
+  const [appMode, setAppMode] = useState('extractor'); // 'extractor' | 'predictor'
+
+  /* ── Detect ?checkout=success in URL on mount ── */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('checkout');
+    const plan   = params.get('plan') || 'pro';
+    const sid    = params.get('session_id') || '';
+    if (status === 'success') {
+      setCheckoutSuccess({ plan, sessionId: sid });
+      // Clean URL
+      const clean = window.location.pathname;
+      window.history.replaceState({}, '', clean);
+    } else if (status === 'cancelled') {
+      // Just clean the URL; user can try again
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []); // eslint-disable-line
+
   /* ── state ── */
   const [step, setStep] = useState(1);
 
@@ -401,6 +446,35 @@ export default function App() {
 
   return (
     <div className="app" data-theme="lotto">
+      {/* ── Stripe: Checkout email/redirect modal ── */}
+      <AnimatePresence>
+        {pendingCheckout && (
+          <StripeCheckout
+            plan={pendingCheckout.plan}
+            billing={pendingCheckout.billing || 'monthly'}
+            onClose={() => setPendingCheckout(null)}
+            onMockUpgrade={mockUpgrade}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Stripe: Post-payment success overlay ── */}
+      <AnimatePresence>
+        {checkoutSuccess && (
+          <CheckoutSuccess
+            plan={checkoutSuccess.plan}
+            sessionId={checkoutSuccess.sessionId}
+            onActivate={(p) => activatePlan(p)}
+            onClose={() => setCheckoutSuccess(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ── Monetization overlays ── */}
+      <UpgradeModal />
+      <AnimatePresence>
+        {showPricing && <PricingPage onClose={() => setShowPricing(false)} />}
+      </AnimatePresence>
       {/* ── Toast Stack ── */}
       <div className="toast-stack">
         <AnimatePresence>
@@ -420,7 +494,30 @@ export default function App() {
               <p className="brand-tagline">Real lottery results · No fake data, ever</p>
             </div>
           </div>
+
+          {/* ── Mode switcher ── */}
+          <div className="mode-switcher">
+            <button
+              className={`mode-btn${appMode === 'extractor' ? ' mode-btn--active' : ''}`}
+              onClick={() => setAppMode('extractor')}
+            >
+              📥 Extractor
+            </button>
+            <button
+              className={`mode-btn mode-btn--predictor${appMode === 'predictor' ? ' mode-btn--active mode-btn--predictor-active' : ''}`}
+              onClick={() => setAppMode('predictor')}
+            >
+              🔮 Predictor
+            </button>
+          </div>
+
+          {/* ── Scoreboard CTA — always visible ── */}
+          <a className="scoreboard-cta" href="/lotto-scoreboard.html">
+            🎰 Live Scoreboard
+          </a>
+
           <nav className="site-header__nav">
+            <PlanBadge />
             <span className="nav-pill">
               <span className="nav-pill-dot" />
               Live Data
@@ -434,6 +531,16 @@ export default function App() {
           </nav>
         </div>
       </header>
+
+      {/* ══════════ PREDICTOR MODE ══════════ */}
+      {appMode === 'predictor' && (
+        <main className="main-content" style={{ paddingTop: 0 }}>
+          <UniversalPredictor />
+        </main>
+      )}
+
+      {/* ══════════ EXTRACTOR MODE ══════════ */}
+      {appMode === 'extractor' && <>
 
       {/* ══════════ HERO ══════════ */}
       <section className="hero">
@@ -464,7 +571,6 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
           >
-            Powered by lotto.net archive and NY Open Data API.
             Every number is a real historical draw — zero randomness, zero fakes.
           </motion.p>
 
@@ -582,6 +688,11 @@ export default function App() {
           </motion.div>
         )}
       </main>
+
+      </> /* end extractor mode */}
+
+      {/* ── Bottom ad banner (free plan only) ── */}
+      <AdBanner position="bottom" />
 
       {/* ══════════ FOOTER ══════════ */}
       <footer className="site-footer">

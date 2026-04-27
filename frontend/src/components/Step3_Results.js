@@ -86,7 +86,9 @@ function buildHotNumbers(data, topN = 15) {
       if (!k.startsWith('Ball_')) return;
       const v = row[k];
       if (!v || v === '') return;
-      const n = String(parseInt(v, 10)).padStart(2, '0');
+      // Keep single-digit values as-is (pick games); zero-pad only multi-digit values
+      const parsed = parseInt(v, 10);
+      const n = String(parsed).length <= 1 ? String(parsed) : String(parsed).padStart(2, '0');
       freq[n] = (freq[n] || 0) + 1;
     });
   });

@@ -22,7 +22,8 @@ LOTTERIES_BY_STATE = {
             {"id": "powerball", "name": "Powerball", "type": "multistate"},
             {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
             {"id": "ar_natural_state_jackpot", "name": "Natural State Jackpot", "type": "state"},
-            {"id": "ar_cash3", "name": "Cash 3", "type": "state"},
+            {"id": "ar_cash3", "name": "Cash 3 Evening", "type": "state"},
+            {"id": "ar_cash3_midday", "name": "Cash 3 Midday", "type": "state"},
         ]
     },
     "CA": {
@@ -33,7 +34,8 @@ LOTTERIES_BY_STATE = {
             {"id": "ca_superlotto_plus", "name": "SuperLotto Plus", "type": "state"},
             {"id": "ca_fantasy5", "name": "Fantasy 5", "type": "state"},
             {"id": "ca_daily4", "name": "Daily 4", "type": "state"},
-            {"id": "ca_pick3", "name": "Daily 3", "type": "state"},
+            {"id": "ca_daily3", "name": "Daily 3 Evening", "type": "state"},
+            {"id": "ca_midday3", "name": "Daily 3 Midday", "type": "state"},
         ]
     },
     "CO": {
@@ -68,34 +70,49 @@ LOTTERIES_BY_STATE = {
     "DE": {
         "state_name": "Delaware",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "de_play3", "name": "Play 3", "type": "state"},
-            {"id": "de_play4", "name": "Play 4", "type": "state"},
+            {"id": "powerball",      "name": "Powerball",        "type": "multistate"},
+            {"id": "mega_millions",  "name": "Mega Millions",    "type": "multistate"},
+            {"id": "de_play3_day",   "name": "Play 3 Day",       "type": "state"},
+            {"id": "de_play3_night", "name": "Play 3 Night",     "type": "state"},
+            {"id": "de_play4_day",   "name": "Play 4 Day",       "type": "state"},
+            {"id": "de_play4_night", "name": "Play 4 Night",     "type": "state"},
+            {"id": "de_play5_day",   "name": "Play 5 Day",       "type": "state"},
+            {"id": "de_play5_night", "name": "Play 5 Night",     "type": "state"},
+            {"id": "de_multi_win",   "name": "Multi Win Lotto",  "type": "state"},
         ]
     },
     "FL": {
         "state_name": "Florida",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "fl_lotto", "name": "Florida Lotto", "type": "state"},
-            {"id": "fl_fantasy5", "name": "Fantasy 5", "type": "state"},
-            {"id": "fl_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "fl_pick4", "name": "Pick 4", "type": "state"},
-            {"id": "fl_pick5", "name": "Pick 5", "type": "state"},
-            {"id": "fl_cash4life", "name": "Cash4Life", "type": "multistate"},
+            {"id": "powerball",       "name": "Powerball",       "type": "multistate"},
+            {"id": "mega_millions",   "name": "Mega Millions",   "type": "multistate"},
+            {"id": "fl_lotto",        "name": "Florida Lotto",   "type": "state"},
+            {"id": "fl_fantasy5",     "name": "Fantasy 5",       "type": "state"},
+            {"id": "fl_pick3",        "name": "Pick 3 Evening",  "type": "state"},
+            {"id": "fl_pick3_midday", "name": "Pick 3 Midday",   "type": "state"},
+            {"id": "fl_pick4",        "name": "Pick 4 Evening",  "type": "state"},
+            {"id": "fl_pick4_midday", "name": "Pick 4 Midday",   "type": "state"},
+            {"id": "fl_pick5",        "name": "Pick 5 Evening",  "type": "state"},
+            {"id": "fl_pick5_midday", "name": "Pick 5 Midday",   "type": "state"},
+            {"id": "fl_cash4life",    "name": "Cash4Life",       "type": "multistate"},
         ]
     },
     "GA": {
         "state_name": "Georgia",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "ga_fantasy5", "name": "Fantasy 5", "type": "state"},
-            {"id": "ga_cash3", "name": "Cash 3", "type": "state"},
-            {"id": "ga_cash4", "name": "Cash 4", "type": "state"},
-            {"id": "ga_jumbo_bucks", "name": "Jumbo Bucks Lotto", "type": "state"},
+            {"id": "powerball",        "name": "Powerball",        "type": "multistate"},
+            {"id": "mega_millions",    "name": "Mega Millions",    "type": "multistate"},
+            {"id": "ga_fantasy5",      "name": "Fantasy 5",        "type": "state"},
+            {"id": "ga_cash3",         "name": "Cash 3 Evening",   "type": "state"},
+            {"id": "ga_cash3_midday",  "name": "Cash 3 Midday",    "type": "state"},
+            {"id": "ga_cash3_night",   "name": "Cash 3 Night",     "type": "state"},
+            {"id": "ga_cash4",         "name": "Cash 4 Evening",   "type": "state"},
+            {"id": "ga_cash4_midday",  "name": "Cash 4 Midday",    "type": "state"},
+            {"id": "ga_cash4_night",   "name": "Cash 4 Night",     "type": "state"},
+            {"id": "ga_five_evening",  "name": "FIVE Evening",     "type": "state"},
+            {"id": "ga_five_midday",   "name": "FIVE Midday",      "type": "state"},
+            {"id": "ga_cash_pop",      "name": "Cash Pop",         "type": "state"},
+            # ga_jumbo_bucks removed: not available on lottery.net or lotto.net
         ]
     },
     "HI": [],  # Hawaii: No state lottery
@@ -104,8 +121,12 @@ LOTTERIES_BY_STATE = {
         "lotteries": [
             {"id": "powerball", "name": "Powerball", "type": "multistate"},
             {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "id_weekly_grand", "name": "Weekly Grand", "type": "state"},
-            {"id": "id_pick3", "name": "Pick 3", "type": "state"},
+            {"id": "id_pick3_day",   "name": "Pick 3 Day",   "type": "state"},
+            {"id": "id_pick3_night", "name": "Pick 3 Night", "type": "state"},
+            {"id": "id_pick4_day",   "name": "Pick 4 Day",   "type": "state"},
+            {"id": "id_pick4_night", "name": "Pick 4 Night", "type": "state"},
+            {"id": "id_cash",        "name": "Idaho Cash",   "type": "state"},
+            # id_weekly_grand removed: not available on lottery.net (redirects to homepage)
         ]
     },
     "IL": {
@@ -113,10 +134,14 @@ LOTTERIES_BY_STATE = {
         "lotteries": [
             {"id": "powerball", "name": "Powerball", "type": "multistate"},
             {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "il_lotto", "name": "Lotto", "type": "state"},
-            {"id": "il_lucky_day_lotto", "name": "Lucky Day Lotto", "type": "state"},
-            {"id": "il_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "il_pick4", "name": "Pick 4", "type": "state"},
+            {"id": "il_lotto",                  "name": "Lotto",                  "type": "state"},
+            {"id": "il_lucky_day_lotto_evening", "name": "Lucky Day Lotto Evening", "type": "state"},
+            {"id": "il_lucky_day_lotto_midday",  "name": "Lucky Day Lotto Midday",  "type": "state"},
+            {"id": "il_pick3_evening",           "name": "Pick 3 Evening",          "type": "state"},
+            {"id": "il_pick3_midday",            "name": "Pick 3 Midday",           "type": "state"},
+            {"id": "il_pick4_evening",           "name": "Pick 4 Evening",          "type": "state"},
+            {"id": "il_pick4_midday",            "name": "Pick 4 Midday",           "type": "state"},
+            {"id": "il_hotwins",                 "name": "HotWins",                 "type": "state"},
         ]
     },
     "IN": {
@@ -135,8 +160,10 @@ LOTTERIES_BY_STATE = {
         "lotteries": [
             {"id": "powerball", "name": "Powerball", "type": "multistate"},
             {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "ia_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "ia_pick4", "name": "Pick 4", "type": "state"},
+            {"id": "ia_pick3_evening", "name": "Pick 3 Evening", "type": "state"},
+            {"id": "ia_pick3_midday",  "name": "Pick 3 Midday",  "type": "state"},
+            {"id": "ia_pick4_evening", "name": "Pick 4 Evening", "type": "state"},
+            {"id": "ia_pick4_midday",  "name": "Pick 4 Midday",  "type": "state"},
         ]
     },
     "KS": {
@@ -144,8 +171,11 @@ LOTTERIES_BY_STATE = {
         "lotteries": [
             {"id": "powerball", "name": "Powerball", "type": "multistate"},
             {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "ks_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "ks_super_kansas_cash", "name": "Super Kansas Cash", "type": "state"},
+            {"id": "ks_pick3_evening",  "name": "Pick 3 Evening",  "type": "state"},
+            {"id": "ks_pick3_midday",   "name": "Pick 3 Midday",   "type": "state"},
+            {"id": "ks_super_cash",     "name": "Super Cash",      "type": "state"},
+            # ks_super_kansas_cash renamed to ks_super_cash (correct lottery.net slug)
+            # ks_keno not on lottery.net
         ]
     },
     "KY": {
@@ -153,9 +183,13 @@ LOTTERIES_BY_STATE = {
         "lotteries": [
             {"id": "powerball", "name": "Powerball", "type": "multistate"},
             {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "ky_keno", "name": "Keno", "type": "state"},
-            {"id": "ky_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "ky_pick4", "name": "Pick 4", "type": "state"},
+            {"id": "ky_pick3_evening", "name": "Pick 3 Evening", "type": "state"},
+            {"id": "ky_pick3_midday",  "name": "Pick 3 Midday",  "type": "state"},
+            {"id": "ky_pick4_evening", "name": "Pick 4 Evening", "type": "state"},
+            {"id": "ky_pick4_midday",  "name": "Pick 4 Midday",  "type": "state"},
+            {"id": "ky_cash_ball",     "name": "Cash Ball",      "type": "state"},
+            {"id": "ky_cash_pop",      "name": "Cash Pop",       "type": "state"},
+            # ky_keno not on lottery.net
         ]
     },
     "LA": {
@@ -163,11 +197,11 @@ LOTTERIES_BY_STATE = {
         "lotteries": [
             {"id": "powerball", "name": "Powerball", "type": "multistate"},
             {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "la_lotto", "name": "Lotto", "type": "state"},
-            {"id": "la_easy5", "name": "Easy 5", "type": "state"},
-            {"id": "la_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "la_pick4", "name": "Pick 4", "type": "state"},
-            {"id": "la_pick5", "name": "Pick 5", "type": "state"},
+            {"id": "la_lotto",  "name": "Lotto",   "type": "state"},
+            {"id": "la_easy5",  "name": "Easy 5",   "type": "state"},
+            {"id": "la_pick3",  "name": "Pick 3",   "type": "state"},
+            {"id": "la_pick4",  "name": "Pick 4",   "type": "state"},
+            {"id": "la_pick5",  "name": "Pick 5",   "type": "state"},
         ]
     },
     "ME": {
@@ -183,35 +217,41 @@ LOTTERIES_BY_STATE = {
     "MD": {
         "state_name": "Maryland",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "md_multimatch", "name": "Multi-Match", "type": "state"},
-            {"id": "md_cash4life", "name": "Cash4Life", "type": "multistate"},
-            {"id": "md_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "md_pick4", "name": "Pick 4", "type": "state"},
-            {"id": "md_pick5", "name": "Pick 5", "type": "state"},
+            {"id": "powerball",        "name": "Powerball",        "type": "multistate"},
+            {"id": "mega_millions",     "name": "Mega Millions",     "type": "multistate"},
+            {"id": "md_multimatch",    "name": "Multi-Match",       "type": "state"},
+            {"id": "md_cash4life",     "name": "Cash4Life",         "type": "multistate"},
+            {"id": "md_pick3",         "name": "Pick 3 Evening",    "type": "state"},
+            {"id": "md_pick3_midday",  "name": "Pick 3 Midday",     "type": "state"},
+            {"id": "md_pick4",         "name": "Pick 4 Evening",    "type": "state"},
+            {"id": "md_pick4_midday",  "name": "Pick 4 Midday",     "type": "state"},
+            {"id": "md_pick5",         "name": "Pick 5 Evening",    "type": "state"},
+            {"id": "md_pick5_midday",  "name": "Pick 5 Midday",     "type": "state"},
         ]
     },
     "MA": {
         "state_name": "Massachusetts",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "ma_megabucks_doubler", "name": "Megabucks Doubler", "type": "state"},
-            {"id": "ma_masscash", "name": "Mass Cash", "type": "state"},
-            {"id": "ma_numbers", "name": "The Numbers Game", "type": "state"},
+            {"id": "powerball",            "name": "Powerball",          "type": "multistate"},
+            {"id": "mega_millions",         "name": "Mega Millions",       "type": "multistate"},
+            {"id": "ma_megabucks_doubler",  "name": "Megabucks",           "type": "state"},
+            {"id": "ma_masscash",           "name": "Mass Cash",           "type": "state"},
+            {"id": "ma_numbers",            "name": "Numbers Evening",      "type": "state"},
+            {"id": "ma_numbers_midday",     "name": "Numbers Midday",       "type": "state"},
         ]
     },
     "MI": {
         "state_name": "Michigan",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "mi_lotto47", "name": "Lotto 47", "type": "state"},
-            {"id": "mi_fantasy5", "name": "Fantasy 5", "type": "state"},
-            {"id": "mi_daily3", "name": "Daily 3", "type": "state"},
-            {"id": "mi_daily4", "name": "Daily 4", "type": "state"},
-            {"id": "mi_keno", "name": "Club Keno", "type": "state"},
+            {"id": "powerball",         "name": "Powerball",        "type": "multistate"},
+            {"id": "mega_millions",      "name": "Mega Millions",     "type": "multistate"},
+            {"id": "mi_lotto47",        "name": "Lotto 47",          "type": "state"},
+            {"id": "mi_fantasy5",       "name": "Fantasy 5",         "type": "state"},
+            {"id": "mi_daily3",         "name": "Daily 3 Evening",   "type": "state"},
+            {"id": "mi_daily3_midday",  "name": "Daily 3 Midday",    "type": "state"},
+            {"id": "mi_daily4",         "name": "Daily 4 Evening",   "type": "state"},
+            {"id": "mi_daily4_midday",  "name": "Daily 4 Midday",    "type": "state"},
+            {"id": "mi_keno",           "name": "Club Keno",         "type": "state"},
         ]
     },
     "MN": {
@@ -227,10 +267,12 @@ LOTTERIES_BY_STATE = {
     "MS": {
         "state_name": "Mississippi",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "ms_msplay3", "name": "MS Play 3", "type": "state"},
-            {"id": "ms_msplay4", "name": "MS Play 4", "type": "state"},
+            {"id": "powerball",        "name": "Powerball",         "type": "multistate"},
+            {"id": "mega_millions",     "name": "Mega Millions",      "type": "multistate"},
+            {"id": "ms_cash3",         "name": "Cash 3 Evening",     "type": "state"},
+            {"id": "ms_cash3_midday",  "name": "Cash 3 Midday",      "type": "state"},
+            {"id": "ms_cash4",         "name": "Cash 4 Evening",     "type": "state"},
+            {"id": "ms_cash4_midday",  "name": "Cash 4 Midday",      "type": "state"},
         ]
     },
     "MO": {
@@ -434,12 +476,14 @@ LOTTERIES_BY_STATE = {
     "VA": {
         "state_name": "Virginia",
         "lotteries": [
-            {"id": "powerball", "name": "Powerball", "type": "multistate"},
-            {"id": "mega_millions", "name": "Mega Millions", "type": "multistate"},
-            {"id": "va_cash5", "name": "Cash 5", "type": "state"},
-            {"id": "va_pick3", "name": "Pick 3", "type": "state"},
-            {"id": "va_pick4", "name": "Pick 4", "type": "state"},
-            {"id": "va_cash4life", "name": "Cash4Life", "type": "multistate"},
+            {"id": "powerball",    "name": "Powerball",      "type": "multistate"},
+            {"id": "mega_millions","name": "Mega Millions",  "type": "multistate"},
+            {"id": "va_cash5",     "name": "Cash 5",         "type": "state"},
+            {"id": "va_pick3",     "name": "Pick 3 Night",   "type": "state"},
+            {"id": "va_pick3_day", "name": "Pick 3 Day",     "type": "state"},
+            {"id": "va_pick4",     "name": "Pick 4 Night",   "type": "state"},
+            {"id": "va_pick4_day", "name": "Pick 4 Day",     "type": "state"},
+            {"id": "va_cash4life", "name": "Cash4Life",      "type": "multistate"},
         ]
     },
     "WA": {
