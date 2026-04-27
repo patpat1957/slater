@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Real-Time Lotto Scoreboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎰</text></svg>"/>
+<style>
+:root{
+  --bg:#0a0e1a;--panel:#111827;--panel2:#1a2235;--border:#1f2d45;
+  --accent:#f59e0b;--accent2:#3b82f6;--accent3:#10b981;--accent4:#ef4444;
+  --accent5:#8b5cf6;--text:#e2e8f0;--muted:#64748b;--hot:#ef4444;
+  --warm:#f97316;--cold:#3b82f6;--absent:#6b7280;
+  --p1:#f59e0b;--p2:#3b82f6;--p3:#10b981;--p4:#8b5cf6;--p5:#ec4899;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
+
+/* HEADER */
+.header{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%);
+  border-bottom:2px solid var(--accent);padding:16px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.header h1{font-size:1.4rem;background:linear-gradient(90deg,var(--accent),var(--accent3));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.live-badge{background:#ef4444;color:white;font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:20px;animation:livePulse 2s infinite}
+@keyframes livePulse{0%,100%{opacity:1}50%{opacity:.5}}
+.clock{font-size:.82rem;color:var(--muted);margin-left:auto;white-space:nowrap}
+.header-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn-refresh{background:linear-gradient(135deg,var(--accent2),var(--accent5));color:white;border:none;padding:7px 16px;border-radius:8px;cursor:pointer;font-size:.78rem;font-weight:600;transition:all .2s}
+.btn-refresh:hover{transform:scale(1.05);box-shadow:0 0 15px rgba(59,130,246,.4)}
+.btn-refresh.spinning{animation:spin .6s linear}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.countdown{font-size:.7rem;color:var(--muted);min-width:90px;text-align:center}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px}
+.status-dot.ok{background:#10b981}
+.status-dot.loading{background:#f59e0b;animation:livePulse 1s infinite}
+.status-dot.error{background:#ef4444}
+
+/* TABS */
+.tabs{display:flex;gap:4px;padding:12px 24px 0;flex-wrap:wrap}
+.tab-btn{background:var(--panel);color:var(--muted);border:1px solid var(--border);padding:8px 18px;border-radius:10px 10px 0 0;cursor:pointer;font-size:.82rem;font-weight:600;transition:all .2s}
+.tab-btn:hover{color:var(--text);border-color:var(--accent)}
+.tab-btn.active{background:var(--panel2);color:var(--accent);border-color:var(--accent);border-bottom-color:var(--panel2)}
+.draw-tabs{display:flex;gap:4px;padding:8px 24px}
+.draw-tab{background:transparent;color:var(--muted);border:1px solid var(--border);padding:5px 14px;border-radius:6px;cursor:pointer;font-size:.75rem;font-weight:600;transition:all .2s}
+.draw-tab:hover{color:var(--text)}
+.draw-tab.active{background:var(--accent2);color:white;border-color:var(--accent2)}
+
+/* MAIN */
+.main{padding:16px 24px;max-width:1400px;margin:0 auto}
+.game-panel{display:none}
+.game-panel.active{display:block}
+
+/* CARDS */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.card-title{font-size:.92rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card-title .icon{font-size:1.1rem}
+
+/* GRID */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+
+/* SCOREBOARD TABLE */
+.sb-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.sb-table th{background:var(--panel2);color:var(--muted);padding:8px 10px;text-align:left;font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.sb-table td{padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.04)}
+.sb-table tr:hover{background:rgba(245,158,11,.04)}
+
+/* BALLS */
+.ball{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;font-weight:700;font-size:.82rem;margin:0 2px}
+.ball.sm{width:24px;height:24px;font-size:.72rem}
+.b-p1{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000}
+.b-p2{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff}
+.b-p3{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+.b-p4{background:linear-gradient(135deg,#8b5cf6,#7c3aed);color:#fff}
+.b-p5{background:linear-gradient(135deg,#ec4899,#db2777);color:#fff}
+.b-extra{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+.b-hot{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+.b-warm{background:linear-gradient(135deg,#f97316,#ea580c);color:#fff}
+.b-cold{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff}
+.b-absent{background:#374151;color:#6b7280}
+.balls-row{display:flex;align-items:center;gap:3px}
+
+/* STATUS */
+.st-confirmed{color:#10b981;font-weight:600;font-size:.72rem}
+
+/* SUMMARY BANNER */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;margin-bottom:16px}
+.summary-item{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
+.summary-item .label{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.summary-item .value{font-size:1.1rem;font-weight:700;margin-top:2px}
+
+/* FREQ TABLE */
+.freq-bar-wrap{height:8px;background:#1e293b;border-radius:4px;overflow:hidden;min-width:60px}
+.freq-bar{height:100%;border-radius:4px;transition:width .4s ease}
+.fb-hot{background:linear-gradient(90deg,#ef4444,#f97316)}
+.fb-warm{background:linear-gradient(90deg,#f97316,#f59e0b)}
+.fb-cold{background:linear-gradient(90deg,#3b82f6,#60a5fa)}
+.fb-zero{background:#374151}
+
+/* POSITION MAP */
+.pos-map{display:grid;gap:3px}
+.pos-map-row{display:flex;align-items:center;gap:4px;font-size:.72rem}
+.pos-map-label{width:24px;font-weight:700;color:var(--muted)}
+.pos-map-cell{width:28px;height:24px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;font-size:.7rem;font-weight:600}
+
+/* PICK CARDS */
+.pick-card{display:flex;gap:6px;align-items:center;padding:10px;background:var(--panel2);border-radius:8px;border:1px solid var(--accent)}
+.pick-label{font-size:.7rem;color:var(--muted);font-weight:600}
+
+/* ALERTS */
+.alert{padding:12px 16px;border-radius:8px;font-size:.8rem;margin-bottom:12px}
+.alert-info{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:#93c5fd}
+.alert-warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fcd34d}
+.alert-error{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#fca5a5}
+
+/* LOADING */
+.loading-overlay{position:absolute;inset:0;background:rgba(10,14,26,.85);display:flex;align-items:center;justify-content:center;border-radius:12px;z-index:10}
+.loader{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+
+/* EMPTY STATE */
+.empty{text-align:center;padding:40px;color:var(--muted)}
+.empty .icon{font-size:2.5rem;margin-bottom:12px}
+
+/* UPDATE FLASH */
+@keyframes flashIn{0%{background:rgba(245,158,11,.15)}100%{background:transparent}}
+.update-flash{animation:flashIn .8s ease}
+
+/* BACK LINK */
+.back-link{color:var(--accent2);text-decoration:none;font-size:.8rem;transition:color .2s}
+.back-link:hover{color:var(--accent)}
+
+/* Settings */
+.settings{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:4px 24px 8px}
+.settings label{font-size:.72rem;color:var(--muted)}
+.settings select,.settings input{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:.75rem}
+
+/* RESPONSIVE */
+@media(max-width:600px){
+  .header{padding:10px 12px;gap:8px}
+  .header h1{font-size:1.1rem}
+  .main{padding:10px 12px}
+  .tabs{padding:8px 12px 0}
+  .draw-tabs{padding:6px 12px}
+  .settings{padding:4px 12px 8px}
+  .ball{width:26px;height:26px;font-size:.72rem}
+  .summary{grid-template-columns:repeat(3,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <a href="/" class="back-link">&larr; Back</a>
+  <h1>Real-Time Lotto Scoreboard</h1>
+  <span class="live-badge" id="liveBadge">LIVE</span>
+  <span class="clock" id="clock"></span>
+  <div class="header-controls">
+    <span id="statusIndicator"><span class="status-dot ok"></span><span id="statusText">Ready</span></span>
+    <button class="btn-refresh" id="refreshBtn" onclick="manualRefresh()">&#8635; Refresh</button>
+    <span class="countdown" id="countdown">Next update: --</span>
+  </div>
+</div>
+
+<!-- GAME TABS -->
+<div class="tabs" id="gameTabs">
+  <button class="tab-btn active" onclick="switchGame('pick3',this)">Pick 3</button>
+  <button class="tab-btn" onclick="switchGame('pick4',this)">Pick 4</button>
+  <button class="tab-btn" onclick="switchGame('pick5',this)">Pick 5</button>
+  <button class="tab-btn" onclick="switchGame('powerball',this)">Powerball</button>
+  <button class="tab-btn" onclick="switchGame('megamillions',this)">Mega Millions</button>
+</div>
+
+<!-- DRAW TABS -->
+<div class="draw-tabs" id="drawTabs">
+  <button class="draw-tab" onclick="switchDraw('midday',this)">Midday</button>
+  <button class="draw-tab active" onclick="switchDraw('evening',this)">Evening</button>
+  <button class="draw-tab" onclick="switchDraw('night',this)">Night</button>
+</div>
+
+<!-- SETTINGS -->
+<div class="settings">
+  <label>Auto-refresh:
+    <select id="refreshInterval" onchange="updateRefreshInterval()">
+      <option value="60">1 min</option>
+      <option value="120" selected>2 min</option>
+      <option value="300">5 min</option>
+      <option value="600">10 min</option>
+      <option value="0">Off</option>
+    </select>
+  </label>
+  <label>Date:
+    <input type="date" id="targetDate" onchange="dateChanged()"/>
+  </label>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+  <!-- Data info bar -->
+  <div id="dataInfo" class="alert alert-info" style="display:none"></div>
+  <div id="errorBar" class="alert alert-error" style="display:none"></div>
+
+  <!-- Summary Banner -->
+  <div class="summary" id="summaryBanner">
+    <div class="summary-item"><div class="label">States</div><div class="value" id="s-states">--</div></div>
+    <div class="summary-item"><div class="label">Total Balls</div><div class="value" id="s-balls">--</div></div>
+    <div class="summary-item"><div class="label">Hottest</div><div class="value" id="s-hot">--</div></div>
+    <div class="summary-item"><div class="label">Coldest</div><div class="value" id="s-cold">--</div></div>
+    <div class="summary-item"><div class="label">Absent</div><div class="value" id="s-absent">--</div></div>
+    <div class="summary-item"><div class="label">Top Pick</div><div class="value" id="s-pick">--</div></div>
+    <div class="summary-item"><div class="label">Last Update</div><div class="value" id="s-updated">--</div></div>
+  </div>
+
+  <!-- Two-column layout -->
+  <div class="grid-2">
+    <!-- LEFT: Scoreboard -->
+    <div class="card" id="scoreboardCard" style="position:relative">
+      <div class="card-title"><span class="icon">&#127922;</span> Live Scoreboard</div>
+      <div id="scoreboardLoading" class="loading-overlay" style="display:none"><div class="loader"></div></div>
+      <table class="sb-table">
+        <thead id="sbHead"><tr>
+          <th>State</th><th>Date</th><th>Result</th><th>P1</th><th>P2</th><th>P3</th><th>Extra</th><th>Status</th>
+        </tr></thead>
+        <tbody id="sbBody">
+          <tr><td colspan="8" class="empty"><div class="icon">&#128522;</div>Loading data...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- RIGHT: Analysis -->
+    <div>
+      <!-- Frequency Table -->
+      <div class="card">
+        <div class="card-title"><span class="icon">&#128202;</span> Digit Frequency</div>
+        <div id="freqTable"></div>
+      </div>
+
+      <!-- Position Map -->
+      <div class="card">
+        <div class="card-title"><span class="icon">&#127919;</span> Position Heat Map</div>
+        <div id="posMap"></div>
+      </div>
+
+      <!-- Recommended Picks -->
+      <div class="card">
+        <div class="card-title"><span class="icon">&#11088;</span> Recommended Picks</div>
+        <div id="pickCards"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════
+const STATE = {
+  game: 'pick3',
+  draw: 'evening',
+  targetDate: null,        // null = today
+  entries: [],
+  refreshSec: 120,
+  timer: null,
+  countdownTimer: null,
+  nextRefreshAt: null,
+  loading: false,
+  lastFetch: null,
+};
+
+const GAME_BALLS = { pick3:3, pick4:4, pick5:5, powerball:5, megamillions:5 };
+const DIGIT_GAMES = ['pick3','pick4','pick5'];
+
+// ════════════════════════════════════════════════════
+//  API
+// ════════════════════════════════════════════════════
+// API_BASE is empty (same-origin) when served from backend, otherwise point to backend port
+const API_BASE = '';
+
+async function fetchScoreboard() {
+  if (STATE.loading) return;
+  STATE.loading = true;
+  setStatus('loading', 'Fetching...');
+  showLoading(true);
+
+  const params = new URLSearchParams({ game: STATE.game, draw: STATE.draw });
+  if (STATE.targetDate) params.set('target_date', STATE.targetDate);
+
+  try {
+    const resp = await fetch(`${API_BASE}/api/scoreboard?${params}`);
+    if (!resp.ok) {
+      const err = await resp.json().catch(()=>({}));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    STATE.entries = data.entries || [];
+    STATE.lastFetch = new Date();
+
+    hideError();
+    if (data.errors && data.errors.length > 0) {
+      showError(`${data.errors.length} source(s) had issues: ${data.errors.slice(0,3).join('; ')}`);
+    }
+
+    const dateStr = data.target_date || 'today';
+    showInfo(`Showing <strong>${data.total_states}</strong> states for <strong>${STATE.game.toUpperCase()}</strong> ${STATE.draw} | Target: ${dateStr} | Fetched at ${new Date(data.fetched_at+'Z').toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'2-digit',minute:'2-digit'})} ET`);
+    setStatus('ok', `${data.total_states} states`);
+  } catch(e) {
+    console.error('Fetch error:', e);
+    setStatus('error', 'Error');
+    showError(`Failed to fetch data: ${e.message}. Will retry on next refresh.`);
+  } finally {
+    STATE.loading = false;
+    showLoading(false);
+    renderAll();
+    scheduleRefresh();
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  RENDERING
+// ════════════════════════════════════════════════════
+function renderAll() {
+  const n = GAME_BALLS[STATE.game] || 3;
+  const entries = STATE.entries;
+
+  // Summary
+  if (entries.length === 0) {
+    document.getElementById('s-states').textContent = '0';
+    document.getElementById('s-balls').textContent = '0';
+    document.getElementById('s-hot').textContent = '--';
+    document.getElementById('s-cold').textContent = '--';
+    document.getElementById('s-absent').textContent = '--';
+    document.getElementById('s-pick').textContent = '--';
+  }
+
+  // Update timestamp
+  if (STATE.lastFetch) {
+    document.getElementById('s-updated').textContent = STATE.lastFetch.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
+
+  // Table headers
+  const thead = document.getElementById('sbHead');
+  let hCols = '<th>State</th><th>Date</th><th>Result</th>';
+  for (let i=1;i<=n;i++) hCols += `<th style="color:${posColor(i-1)}">P${i}</th>`;
+  hCols += '<th>Extra</th><th>Status</th>';
+  thead.innerHTML = `<tr>${hCols}</tr>`;
+
+  // Table body
+  const tbody = document.getElementById('sbBody');
+  if (entries.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${n+4}" class="empty"><div class="icon">&#128064;</div>No data found for ${STATE.game} ${STATE.draw}. Try a different date or draw type.</td></tr>`;
+    document.getElementById('freqTable').innerHTML = '';
+    document.getElementById('posMap').innerHTML = '';
+    document.getElementById('pickCards').innerHTML = '';
+    return;
+  }
+
+  // Sort entries: alphabetically by state
+  entries.sort((a,b) => a.state.localeCompare(b.state));
+
+  tbody.innerHTML = entries.map(e => {
+    const balls = e.balls || [];
+    const resultBalls = balls.map((d,i) =>
+      `<span class="ball sm ${posBallCls(i)}">${d}</span>`
+    ).join('');
+    const extraBall = e.extra ? `<span class="ball sm b-extra">${e.extra}</span>` : '';
+    const positionCells = balls.map((d,i) =>
+      `<td><span class="ball sm ${posBallCls(i)}">${d}</span></td>`
+    ).join('');
+    // Pad missing positions
+    const padCells = Array(Math.max(0, n - balls.length)).fill('<td>-</td>').join('');
+
+    return `<tr class="update-flash">
+      <td><strong>${e.state}</strong></td>
+      <td style="font-size:.72rem;color:var(--muted)">${formatDate(e.date)}</td>
+      <td><div class="balls-row">${resultBalls}${extraBall?'<span style="margin-left:4px;font-size:.65rem;color:var(--muted)">+</span>'+extraBall:''}</div></td>
+      ${positionCells}${padCells}
+      <td>${e.extra ? `<span class="ball sm b-extra">${e.extra}</span>` : '<span style="color:var(--muted)">-</span>'}</td>
+      <td><span class="st-confirmed">Confirmed</span></td>
+    </tr>`;
+  }).join('');
+
+  // Analysis (digit games only)
+  if (DIGIT_GAMES.includes(STATE.game)) {
+    const analysis = analyzeDigits(entries, n);
+    renderSummary(analysis, n);
+    renderFreqTable(analysis, n);
+    renderPosMap(analysis, n);
+    renderPicks(analysis, n);
+  } else {
+    // Jackpot games - simpler analysis
+    document.getElementById('s-states').textContent = entries.length;
+    document.getElementById('s-balls').textContent = entries.reduce((s,e) => s + (e.balls||[]).length, 0);
+    document.getElementById('freqTable').innerHTML = '<div style="color:var(--muted);text-align:center;padding:20px;font-size:.8rem">Frequency analysis is available for Pick 3/4/5 games</div>';
+    document.getElementById('posMap').innerHTML = '';
+    document.getElementById('pickCards').innerHTML = '';
+  }
+}
+
+function analyzeDigits(entries, n) {
+  const pos = Array.from({length:n}, ()=> new Array(10).fill(0));
+  const overall = new Array(10).fill(0);
+
+  entries.forEach(e => {
+    (e.balls||[]).forEach((d,i) => {
+      if (i < n) {
+        const di = parseInt(d);
+        if (!isNaN(di) && di >= 0 && di <= 9) {
+          pos[i][di]++;
+          overall[di]++;
+        }
+      }
+    });
+  });
+
+  const totalBalls = overall.reduce((a,b)=>a+b,0);
+  const maxFreq = Math.max(...overall, 1);
+  const sortedDigits = [...Array(10).keys()].sort((a,b)=>overall[b]-overall[a]);
+  const absent = [...Array(10).keys()].filter(d=>overall[d]===0);
+  const hotDigit = sortedDigits[0];
+  const coldDigit = sortedDigits.filter(d=>overall[d]>0).pop();
+  const bestPerPos = pos.map(p=>[...Array(10).keys()].sort((a,b)=>p[b]-p[a]));
+  const missingPerPos = pos.map(p=>[...Array(10).keys()].filter(d=>p[d]===0));
+
+  return { pos, overall, totalBalls, maxFreq, sortedDigits, absent, hotDigit, coldDigit, bestPerPos, missingPerPos, entryCount: entries.length };
+}
+
+function renderSummary(A, n) {
+  document.getElementById('s-states').textContent = A.entryCount;
+  document.getElementById('s-balls').textContent = A.totalBalls;
+  document.getElementById('s-hot').textContent = A.totalBalls > 0 ? `${A.hotDigit} (${A.overall[A.hotDigit]}x)` : '--';
+  document.getElementById('s-cold').textContent = A.totalBalls > 0 && A.coldDigit != null ? `${A.coldDigit} (${A.overall[A.coldDigit]}x)` : '--';
+  document.getElementById('s-absent').textContent = A.absent.length > 0 ? A.absent.join(', ') : 'none';
+  document.getElementById('s-pick').textContent = A.entryCount > 0 ? A.bestPerPos.map(bp=>bp[0]).join('-') : '--';
+}
+
+function renderFreqTable(A, n) {
+  const el = document.getElementById('freqTable');
+  const {overall, pos, totalBalls, maxFreq, sortedDigits} = A;
+
+  let posHeaders = '';
+  for (let i=0;i<n;i++) posHeaders += `<th style="padding:3px 6px;color:${posColor(i)};text-align:center">P${i+1}</th>`;
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:.78rem">
+      <thead><tr>
+        <th style="padding:3px 6px;color:var(--muted);text-align:left">Digit</th>
+        <th style="padding:3px 6px;color:var(--muted);text-align:center">Total</th>
+        ${posHeaders}
+        <th style="padding:3px 6px;color:var(--muted);text-align:right">%</th>
+        <th style="padding:3px 6px;color:var(--muted);min-width:70px">Bar</th>
+        <th style="padding:3px 6px;color:var(--muted);text-align:center">Flag</th>
+      </tr></thead>
+      <tbody>
+        ${sortedDigits.map(d => {
+          const cnt = overall[d];
+          const pct = totalBalls > 0 ? (cnt/totalBalls*100).toFixed(0) : 0;
+          const barW = maxFreq > 0 ? (cnt/maxFreq*100).toFixed(0) : 0;
+          const barCls = cnt===0?'fb-zero':cnt>=maxFreq*0.6?'fb-hot':cnt>=maxFreq*0.3?'fb-warm':'fb-cold';
+          const bCls = cnt===0?'b-absent':cnt>=maxFreq*0.6?'b-hot':cnt>=maxFreq*0.3?'b-warm':'b-cold';
+          const flag = cnt===0?'&#10060;':cnt>=maxFreq*0.6?'&#128293;':cnt>=maxFreq*0.3?'&#129000;':'&#10052;&#65039;';
+          const posBreak = pos.map(p=>`<td style="padding:3px 6px;text-align:center;color:var(--muted)">${p[d]}</td>`).join('');
+          return `<tr>
+            <td style="padding:3px 8px"><span class="ball sm ${bCls}">${d}</span></td>
+            <td style="padding:3px 8px;text-align:center;font-weight:700">${cnt}x</td>
+            ${posBreak}
+            <td style="padding:3px 8px;text-align:right;color:var(--muted);font-size:.72rem">${pct}%</td>
+            <td style="padding:3px 8px"><div class="freq-bar-wrap"><div class="freq-bar ${barCls}" style="width:${barW}%"></div></div></td>
+            <td style="padding:3px 8px;text-align:center">${flag}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div style="margin-top:8px;font-size:.72rem;color:var(--muted)">
+      Based on <strong>${A.entryCount}</strong> confirmed draws (${totalBalls} total balls). P1-P${n} show per-position counts.
+    </div>`;
+}
+
+function renderPosMap(A, n) {
+  const el = document.getElementById('posMap');
+  const {pos, overall} = A;
+
+  // Max count in any cell for color intensity
+  const flatMax = Math.max(...pos.flat(), 1);
+
+  let html = '<div class="pos-map">';
+  // Header row
+  html += '<div class="pos-map-row"><span class="pos-map-label"></span>';
+  for (let d=0;d<=9;d++) html += `<span class="pos-map-cell" style="font-weight:700;color:var(--muted)">${d}</span>`;
+  html += '</div>';
+
+  for (let i=0;i<n;i++) {
+    html += `<div class="pos-map-row"><span class="pos-map-label" style="color:${posColor(i)}">P${i+1}</span>`;
+    for (let d=0;d<=9;d++) {
+      const cnt = pos[i][d];
+      const intensity = flatMax > 0 ? cnt / flatMax : 0;
+      let bg, fg;
+      if (cnt === 0) {
+        bg = '#1e293b'; fg = '#4b5563';
+      } else if (intensity > 0.7) {
+        bg = '#ef4444'; fg = '#fff';
+      } else if (intensity > 0.4) {
+        bg = '#f97316'; fg = '#fff';
+      } else {
+        bg = '#3b82f6'; fg = '#fff';
+      }
+      html += `<span class="pos-map-cell" style="background:${bg};color:${fg}" title="P${i+1} digit ${d}: ${cnt}x">${cnt}</span>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderPicks(A, n) {
+  const el = document.getElementById('pickCards');
+  if (A.entryCount === 0) { el.innerHTML = ''; return; }
+
+  const {bestPerPos, missingPerPos, overall} = A;
+
+  // Strategy 1: Most frequent per position
+  const hotPick = bestPerPos.map(bp=>bp[0]);
+  // Strategy 2: Second-most frequent (contrarian)
+  const warmPick = bestPerPos.map(bp=>bp[1]);
+  // Strategy 3: Due digits (least frequent non-zero, or absent)
+  const duePick = bestPerPos.map((bp,i) => {
+    const missing = missingPerPos[i];
+    if (missing.length > 0) return missing[0];
+    return bp[bp.length-1]; // least frequent
+  });
+
+  function pickRow(label, digits, cls) {
+    return `<div class="pick-card" style="margin-bottom:6px">
+      <span class="pick-label">${label}:</span>
+      ${digits.map((d,i)=>`<span class="ball sm ${posBallCls(i)}">${d}</span>`).join('')}
+    </div>`;
+  }
+
+  el.innerHTML = pickRow('&#128293; Hot Pick', hotPick) +
+    pickRow('&#129000; Warm Pick', warmPick) +
+    pickRow('&#128167; Due Pick', duePick) +
+    `<div style="font-size:.68rem;color:var(--muted);margin-top:6px">Based on ${A.entryCount} draws. For entertainment only.</div>`;
+}
+
+// ════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════
+function posColor(i) { return ['var(--p1)','var(--p2)','var(--p3)','var(--p4)','var(--p5)'][i]||'var(--text)'; }
+function posBallCls(i) { return ['b-p1','b-p2','b-p3','b-p4','b-p5'][i]||'b-p1'; }
+
+function formatDate(d) {
+  if (!d) return '';
+  const parts = d.split('-');
+  if (parts.length===3) return `${parseInt(parts[1])}/${parseInt(parts[2])}/${parts[0].slice(2)}`;
+  return d;
+}
+
+function setStatus(type, text) {
+  const dot = document.querySelector('#statusIndicator .status-dot');
+  const txt = document.getElementById('statusText');
+  dot.className = `status-dot ${type}`;
+  txt.textContent = text;
+}
+
+function showLoading(on) {
+  document.getElementById('scoreboardLoading').style.display = on ? 'flex' : 'none';
+}
+
+function showInfo(html) {
+  const el = document.getElementById('dataInfo');
+  el.innerHTML = html;
+  el.style.display = 'block';
+}
+
+function showError(msg) {
+  const el = document.getElementById('errorBar');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideError() {
+  document.getElementById('errorBar').style.display = 'none';
+}
+
+// ════════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════════
+function switchGame(game, btn) {
+  STATE.game = game;
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  // Show/hide draw tabs for jackpot games
+  const drawTabsEl = document.getElementById('drawTabs');
+  if (game === 'powerball' || game === 'megamillions') {
+    drawTabsEl.style.display = 'none';
+  } else {
+    drawTabsEl.style.display = 'flex';
+  }
+
+  fetchScoreboard();
+}
+
+function switchDraw(draw, btn) {
+  STATE.draw = draw;
+  document.querySelectorAll('.draw-tab').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  fetchScoreboard();
+}
+
+function dateChanged() {
+  const val = document.getElementById('targetDate').value;
+  STATE.targetDate = val || null;
+  fetchScoreboard();
+}
+
+function manualRefresh() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spinning');
+  setTimeout(()=>btn.classList.remove('spinning'), 600);
+  fetchScoreboard();
+}
+
+// ════════════════════════════════════════════════════
+//  AUTO-REFRESH
+// ════════════════════════════════════════════════════
+function scheduleRefresh() {
+  clearTimeout(STATE.timer);
+  clearInterval(STATE.countdownTimer);
+
+  if (STATE.refreshSec <= 0) {
+    document.getElementById('countdown').textContent = 'Auto-refresh: off';
+    return;
+  }
+
+  STATE.nextRefreshAt = Date.now() + STATE.refreshSec * 1000;
+  STATE.timer = setTimeout(() => fetchScoreboard(), STATE.refreshSec * 1000);
+
+  // Countdown display
+  STATE.countdownTimer = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((STATE.nextRefreshAt - Date.now()) / 1000));
+    if (remaining <= 0) {
+      document.getElementById('countdown').textContent = 'Refreshing...';
+      clearInterval(STATE.countdownTimer);
+    } else {
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      document.getElementById('countdown').textContent = `Next: ${m}:${String(s).padStart(2,'0')}`;
+    }
+  }, 1000);
+}
+
+function updateRefreshInterval() {
+  STATE.refreshSec = parseInt(document.getElementById('refreshInterval').value) || 0;
+  scheduleRefresh();
+}
+
+// ════════════════════════════════════════════════════
+//  CLOCK
+// ════════════════════════════════════════════════════
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleString('en-US', {timeZone:'America/New_York',
+      month:'short', day:'numeric', year:'numeric',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'}) + ' ET';
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════
+(function init() {
+  // Set date input to today
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  document.getElementById('targetDate').value = `${yyyy}-${mm}-${dd}`;
+
+  // Initial fetch
+  fetchScoreboard();
+})();
+</script>
+</body>
+</html>
