@@ -1,0 +1,17 @@
+# ─────────────────────────────────────────────────────────────
+#  Render Blueprint — One-click deploy
+#  https://render.com/docs/blueprint-spec
+# ─────────────────────────────────────────────────────────────
+services:
+  - type: web
+    name: lotto-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd backend && python -m uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2 --proxy-headers --forwarded-allow-ips "*" --access-log --no-server-header
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: ALLOWED_ORIGINS
+        value: "*"
