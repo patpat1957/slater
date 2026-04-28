@@ -1624,6 +1624,136 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
                 const allPred = [...results.pred5].sort((a, b) => getStarCount(b) - getStarCount(a) || b.score - a.score);
                 const filteredPred = minStars === 0 ? allPred : allPred.filter(p => getStarCount(p) >= minStars);
                 const rankEmojis   = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+
+                // ── Print predictions as a clean slip ──
+                const handlePrintPredictions = () => {
+                  if (filteredPred.length === 0) return;
+                  const drawMode = drawTypeStr === 'evening' ? '🌙 Evening' : '☀️ Midday';
+                  const filterNote = minStars > 0 ? `⭐ ≥${minStars}★ filter` : '⭐ All stars';
+                  const totalDraws = results.allHist?.length || allHist.length;
+
+                  const rows = filteredPred.map((p, i) => {
+                    const displayCombo = isNumGame ? [...p.combo].sort((a, b) => a - b) : p.combo;
+                    const nums = displayCombo.map(num => `<span class="pn-ball">${isNumGame ? String(num).padStart(2,'0') : num}</span>`).join('');
+                    const bonus = bonusPool > 0 && pickBonusForCombo(i) != null
+                      ? `<span class="pn-ball pn-ball--bonus">${String(pickBonusForCombo(i)).padStart(2,'0')}</span>` : '';
+                    const stars = '★'.repeat(getStarCount(p)) + '<span style="opacity:.3">★</span>'.repeat(5 - getStarCount(p));
+                    const tag = p.fails.length === 0
+                      ? '<span class="pn-pass">✅ PASS</span>'
+                      : `<span class="pn-fail">⚠️ ${p.fails.slice(0,2).join(', ')}</span>`;
+                    const wf = (p.walkForwardHits !== undefined && p.walkForwardTotal > 0)
+                      ? `<span class="pn-wf">📈 ${p.walkForwardHits}/${p.walkForwardTotal}</span>` : '';
+                    return `<tr class="${p.fails.length === 0 ? 'pn-row-pass' : 'pn-row-near'}">
+                      <td class="pn-num">${rankEmojis[i] || (i + 1)}</td>
+                      <td class="pn-balls">${nums}${bonus}</td>
+                      <td class="pn-stars">${stars}</td>
+                      <td class="pn-tag">${tag}</td>
+                      <td class="pn-wf-cell">${wf}</td>
+                    </tr>`;
+                  }).join('');
+
+                  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${gameLabel} — Next Draw Predictions</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         background: #fff; color: #111; padding: 24px; font-size: 13px; }
+  .pn-header { border-bottom: 2px solid #1e3a8a; padding-bottom: 10px; margin-bottom: 14px; }
+  .pn-title  { font-size: 20px; font-weight: 800; color: #1e3a8a; letter-spacing: .5px; }
+  .pn-meta   { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px;
+               font-size: 11px; color: #475569; font-weight: 600; }
+  .pn-meta span { background: #f1f5f9; border: 1px solid #cbd5e1;
+                  border-radius: 10px; padding: 2px 10px; }
+  .pn-draw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                  gap: 8px; margin: 12px 0; }
+  .pn-draw-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+                  padding: 8px 12px; text-align: center; }
+  .pn-draw-card__title { font-size: 10px; color: #64748b; text-transform: uppercase;
+                         letter-spacing: .5px; margin-bottom: 2px; }
+  .pn-draw-card__val { font-size: 14px; font-weight: 700; color: #1e293b; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  th    { background: #1e3a8a; color: #fff; font-size: 10px; text-transform: uppercase;
+          letter-spacing: .5px; padding: 6px 10px; text-align: left; }
+  th:first-child { width: 36px; text-align: center; }
+  tr    { border-bottom: 1px solid #e2e8f0; }
+  .pn-row-pass { background: #f0fdf4; }
+  .pn-row-near { background: #fffbeb; }
+  .pn-num  { text-align: center; font-weight: 800; color: #1e3a8a;
+             font-size: 14px; padding: 8px 4px; width: 36px; }
+  .pn-balls { padding: 8px 10px; }
+  .pn-ball  { display: inline-block; width: 32px; height: 32px; line-height: 32px;
+              text-align: center; border-radius: 50%; background: #1e3a8a; color: #fff;
+              font-weight: 800; font-size: 12px; margin-right: 4px; }
+  .pn-ball--bonus { background: #dc2626; }
+  .pn-stars { color: #f59e0b; font-size: 14px; padding: 8px 10px; letter-spacing: 1px; white-space: nowrap; }
+  .pn-tag   { padding: 8px 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .pn-pass  { color: #16a34a; }
+  .pn-fail  { color: #b45309; }
+  .pn-wf-cell { padding: 8px 10px; font-size: 10px; color: #3b82f6; white-space: nowrap; }
+  .pn-footer { margin-top: 16px; font-size: 10px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 8px; line-height: 1.7; }
+  @media print { body { padding: 12px; } }
+</style></head><body>
+<div class="pn-header">
+  <div class="pn-title">🎯 ${gameLabel} — Next Draw Predictions</div>
+  <div class="pn-meta">
+    <span>📅 ${nextDraw.dateStr}</span>
+    <span>⏰ ${nextDraw.timeEt}</span>
+    <span>${drawMode}</span>
+    <span>${filterNote}</span>
+    <span>📊 ${totalDraws} draws analyzed</span>
+    <span>📍 ${state}</span>
+  </div>
+</div>
+<div class="pn-draw-grid">
+  <div class="pn-draw-card"><div class="pn-draw-card__title">Next Draw</div><div class="pn-draw-card__val">${nextDraw.dateStr}</div></div>
+  <div class="pn-draw-card"><div class="pn-draw-card__title">Time (ET)</div><div class="pn-draw-card__val">${nextDraw.timeEt}</div></div>
+  <div class="pn-draw-card"><div class="pn-draw-card__title">Draw Days</div><div class="pn-draw-card__val">${nextDraw.days || 'Daily'}</div></div>
+  <div class="pn-draw-card"><div class="pn-draw-card__title">Walk-Forward</div><div class="pn-draw-card__val">${wfWindow} draws tested</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>#</th><th>Numbers</th><th>Stars</th><th>Status</th><th>WF</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<div class="pn-footer">
+  ⚠️ Statistical picks for entertainment only — not a guarantee of winning. Please play responsibly.<br />
+  🔬 All 5,000 iterations scored against ${totalDraws} actual ${gameLabel} draws.<br />
+  📈 Walk-forward backtest: ${wfWindow} real draws &middot; ⭐ Star rating includes real-draw hit rate.<br />
+  Generated: ${new Date().toLocaleString('en-US',{timeZone:'America/New_York'})} ET
+</div>
+</body></html>`;
+
+                  const w = window.open('', '_blank', 'width=750,height=650');
+                  if (!w) return;
+                  w.document.write(html);
+                  w.document.close();
+                  w.focus();
+                  setTimeout(() => { w.print(); }, 400);
+                };
+
+                // ── Copy predictions to clipboard ──
+                const handleCopyPredictions = () => {
+                  if (filteredPred.length === 0) return;
+                  const totalDraws = results.allHist?.length || allHist.length;
+                  const header = `🎯 ${gameLabel} — Next Draw Predictions`;
+                  const dateInfo = `📅 ${nextDraw.dateStr} · ⏰ ${nextDraw.timeEt} · ${drawTypeStr === 'evening' ? '🌙 Evening' : '☀️ Midday'}`;
+                  const statsInfo = `📊 ${totalDraws} draws analyzed · Walk-forward: ${wfWindow} draws · 📍 ${state}`;
+                  const filterInfo = minStars > 0 ? `⭐ Filter: ≥${minStars}★` : '⭐ Filter: All';
+                  const lines = filteredPred.map((p, i) => {
+                    const displayCombo = isNumGame ? [...p.combo].sort((a, b) => a - b) : p.combo;
+                    const nums = displayCombo.join(' - ');
+                    const bonus = bonusPool > 0 && pickBonusForCombo(i) != null ? ` + ${bonusLabel}: ${pickBonusForCombo(i)}` : '';
+                    const stars = '★'.repeat(getStarCount(p)) + '☆'.repeat(5 - getStarCount(p));
+                    const pass = p.fails.length === 0 ? '✅ PASS' : `⚠️ ${p.fails.join(',')}`;
+                    const wf = (p.walkForwardHits !== undefined && p.walkForwardTotal > 0)
+                      ? ` · 📈 ${p.walkForwardHits}/${p.walkForwardTotal}` : '';
+                    return `${rankEmojis[i] || (i + 1)} ${nums}${bonus}  ${stars}  ${pass}${wf}`;
+                  }).join('\n');
+                  const text = [header, dateInfo, statsInfo, filterInfo, '', lines, '', '⚠️ Statistical picks only — play responsibly.'].join('\n');
+                  navigator.clipboard.writeText(text);
+                };
+
                 return (
                 <div className="opt-next-draw">
                   <div className="opt-next-draw__title">
@@ -1666,6 +1796,17 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
                       {results.allHist?.length || allHist.length} {gameLabel} draws
                     </span>
                   </div>
+                  {/* ── Print / Copy buttons for predictions ── */}
+                  {filteredPred.length > 0 && (
+                    <div className="opt-pred-actions">
+                      <button className="opt-pred-action-btn opt-pred-action-btn--print" onClick={handlePrintPredictions} title="Print predictions as a clean slip">
+                        🖨️ Print Predictions
+                      </button>
+                      <button className="opt-pred-action-btn opt-pred-action-btn--copy" onClick={handleCopyPredictions} title="Copy predictions to clipboard">
+                        📋 Copy
+                      </button>
+                    </div>
+                  )}
                   {filteredPred.length === 0 ? (
                     <div className="opt-no-pass" style={{ marginTop: 8 }}>
                       No predicted lines meet the ≥{minStars}★ filter. Try &quot;All&quot; stars or run Auto-Calibrate for more passing combos.
