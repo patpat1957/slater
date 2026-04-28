@@ -4369,6 +4369,44 @@ body::before {
   text-transform: uppercase;
   letter-spacing: .5px;
 }
+/* ─── Prediction Print / Copy buttons ─── */
+.opt-pred-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.opt-pred-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: .78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .2s;
+  letter-spacing: .3px;
+}
+.opt-pred-action-btn--print {
+  background: rgba(139, 92, 246, 0.18);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+.opt-pred-action-btn--print:hover {
+  background: rgba(139, 92, 246, 0.3);
+  transform: translateY(-1px);
+}
+.opt-pred-action-btn--copy {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+.opt-pred-action-btn--copy:hover {
+  background: rgba(52, 211, 153, 0.28);
+  transform: translateY(-1px);
+}
 .opt-pred-row {
   display: flex;
   align-items: center;
