@@ -4369,6 +4369,83 @@ body::before {
   text-transform: uppercase;
   letter-spacing: .5px;
 }
+/* ─── Dedicated prediction star filter ─── */
+.opt-pred-star-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: rgba(251,191,36,0.06);
+  border: 1px solid rgba(251,191,36,0.18);
+  border-radius: 8px;
+}
+.opt-pred-star-filter__label {
+  font-size: .72rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.opt-pred-star-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-m);
+  border-radius: 16px;
+  padding: 3px 10px;
+  font-size: .70rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.opt-pred-star-btn:hover {
+  background: rgba(251,191,36,.12);
+  border-color: rgba(251,191,36,.4);
+  color: #fbbf24;
+}
+.opt-pred-star-btn--active {
+  background: rgba(251,191,36,.22);
+  border-color: #fbbf24;
+  color: #fbbf24;
+  font-weight: 700;
+}
+.opt-pred-star-btn--empty {
+  opacity: .45;
+}
+.opt-pred-star-btn__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.08);
+  font-size: .60rem;
+  font-weight: 700;
+  padding: 0 4px;
+}
+.opt-pred-star-btn--active .opt-pred-star-btn__count {
+  background: rgba(251,191,36,.3);
+}
+.opt-pred-star-reset {
+  background: rgba(251,191,36,0.15);
+  border: 1px solid rgba(251,191,36,0.4);
+  color: #fbbf24;
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-size: .72rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: background 0.15s;
+}
+.opt-pred-star-reset:hover {
+  background: rgba(251,191,36,0.28);
+}
+
 /* ─── Prediction Print / Copy buttons ─── */
 .opt-pred-actions {
   display: flex;
