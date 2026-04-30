@@ -1009,6 +1009,7 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
   // ── Star filter ────────────────────────────────────────────────────────
   // minStars=0 means show all; 2/3/4/5 = show only combos with >= N stars
   const [minStars,   setMinStars]   = useState(0);  // 0 = show all
+  const [predMinStars, setPredMinStars] = useState(0); // dedicated prediction star filter
 
   // ── Manual combo check ─────────────────────────────────────────────────
   const [manualInput,   setManualInput]   = useState('');
@@ -1037,6 +1038,7 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
     setManualResult(null);
     setManualInput('');
     setMinStars(0);   // reset star filter when game/draws change
+    setPredMinStars(0); // reset prediction star filter
 
     if (allHist.length < 1) { setStatsReady(true); return; }
 
@@ -1619,17 +1621,20 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
 
               {/* Next Draw Predictions panel */}
               {results.pred5 && results.pred5.length > 0 && nextDraw && (() => {
-                // Apply star filter to pred5 — always sort by star DESC first,
-                // then show only those meeting minStars threshold.
+                // Apply dedicated prediction star filter (predMinStars) — independent from global starFilter.
                 const allPred = [...results.pred5].sort((a, b) => getStarCount(b) - getStarCount(a) || b.score - a.score);
-                const filteredPred = minStars === 0 ? allPred : allPred.filter(p => getStarCount(p) >= minStars);
+                const activePredFilter = predMinStars;
+                const filteredPred = activePredFilter === 0 ? allPred : allPred.filter(p => getStarCount(p) >= activePredFilter);
                 const rankEmojis   = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                // Compute star distribution for the filter bar badges
+                const predStarDist = {};
+                allPred.forEach(p => { const s = getStarCount(p); predStarDist[s] = (predStarDist[s] || 0) + 1; });
 
                 // ── Print predictions as a clean slip ──
                 const handlePrintPredictions = () => {
                   if (filteredPred.length === 0) return;
                   const drawMode = drawTypeStr === 'evening' ? '🌙 Evening' : '☀️ Midday';
-                  const filterNote = minStars > 0 ? `⭐ ≥${minStars}★ filter` : '⭐ All stars';
+                  const filterNote = activePredFilter > 0 ? `⭐ ≥${activePredFilter}★ filter` : '⭐ All stars';
                   const totalDraws = results.allHist?.length || allHist.length;
 
                   const rows = filteredPred.map((p, i) => {
@@ -1739,7 +1744,7 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
                   const header = `🎯 ${gameLabel} — Next Draw Predictions`;
                   const dateInfo = `📅 ${nextDraw.dateStr} · ⏰ ${nextDraw.timeEt} · ${drawTypeStr === 'evening' ? '🌙 Evening' : '☀️ Midday'}`;
                   const statsInfo = `📊 ${totalDraws} draws analyzed · Walk-forward: ${wfWindow} draws · 📍 ${state}`;
-                  const filterInfo = minStars > 0 ? `⭐ Filter: ≥${minStars}★` : '⭐ Filter: All';
+                  const filterInfo = activePredFilter > 0 ? `⭐ Filter: ≥${activePredFilter}★` : '⭐ Filter: All';
                   const lines = filteredPred.map((p, i) => {
                     const displayCombo = isNumGame ? [...p.combo].sort((a, b) => a - b) : p.combo;
                     const nums = displayCombo.join(' - ');
@@ -1784,11 +1789,35 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
                       <div className="opt-an-val" style={{ fontSize: '.68rem' }}>{(nextDraw.states || []).join(', ')}</div>
                     </div>
                   </div>
+                  {/* ── Dedicated prediction star filter ── */}
+                  <div className="opt-pred-star-filter">
+                    <span className="opt-pred-star-filter__label">Filter predictions:</span>
+                    {[
+                      { v: 0, label: 'All' },
+                      { v: 2, label: '2★+' },
+                      { v: 3, label: '3★+' },
+                      { v: 4, label: '4★+' },
+                      { v: 5, label: '5★' },
+                    ].map(o => {
+                      const count = o.v === 0 ? allPred.length : allPred.filter(p => getStarCount(p) >= o.v).length;
+                      return (
+                        <button
+                          key={o.v}
+                          className={`opt-pred-star-btn${activePredFilter === o.v ? ' opt-pred-star-btn--active' : ''}${count === 0 && o.v > 0 ? ' opt-pred-star-btn--empty' : ''}`}
+                          onClick={() => setPredMinStars(o.v)}
+                          title={o.v === 0 ? 'Show all predictions' : `Show only predictions rated ${o.v}★ or higher`}
+                        >
+                          {o.label}
+                          <span className="opt-pred-star-btn__count">{count}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                   <div className="opt-pred-list-title">
                     🎯 {filteredPred.length}/{allPred.length} Predicted Lines — sorted by ⭐ highest first
-                    {minStars > 0 && (
+                    {activePredFilter > 0 && (
                       <span style={{ fontSize: '.72rem', color: '#fbbf24', marginLeft: 6 }}>
-                        · ⭐ filter: ≥{minStars}★ only
+                        · ⭐ filter: ≥{activePredFilter}★ only
                       </span>
                     )}
                     &nbsp;·&nbsp;
@@ -1809,7 +1838,8 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
                   )}
                   {filteredPred.length === 0 ? (
                     <div className="opt-no-pass" style={{ marginTop: 8 }}>
-                      No predicted lines meet the ≥{minStars}★ filter. Try &quot;All&quot; stars or run Auto-Calibrate for more passing combos.
+                      No predicted lines meet the ≥{activePredFilter}★ filter.
+                      <button className="opt-pred-star-reset" onClick={() => setPredMinStars(0)}>Show All</button>
                     </div>
                   ) : (
                     filteredPred.map((p, i) => {

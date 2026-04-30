@@ -1,0 +1,3265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>🎰 Real-Time Lotto Scoreboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎰</text></svg>"/>
+<style>
+/* ── ROOT & RESET ─────────────────────────────────────────── */
+:root{
+  --bg:#0a0e1a;--panel:#111827;--panel2:#1a2235;--border:#1f2d45;
+  --accent:#f59e0b;--accent2:#3b82f6;--accent3:#10b981;--accent4:#ef4444;
+  --accent5:#8b5cf6;--text:#e2e8f0;--muted:#64748b;--hot:#ef4444;
+  --warm:#f97316;--cold:#3b82f6;--absent:#6b7280;
+  --p1:#f59e0b;--p2:#3b82f6;--p3:#10b981;--p4:#8b5cf6;--p5:#ec4899;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;overflow-x:hidden}
+
+/* ── HEADER ──────────────────────────────────────────────── */
+/* -- HEADER: Apple-style compact single bar -- */
+.header{
+  background:#0f172a;
+  border-bottom:1px solid rgba(245,158,11,.2);
+  padding:0 20px;height:52px;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;position:sticky;top:0;z-index:100;
+}
+/* Embedded (iframe) mode: hide the top header bar to save space */
+body.embedded .header { display:none !important; }
+.hd-left{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.hd-logo{font-size:1.1rem;line-height:1}
+.hd-title{font-size:.9rem;font-weight:700;color:var(--text);letter-spacing:-.2px;white-space:nowrap}
+.hd-title span{color:var(--accent)}
+.hd-center{display:flex;align-items:center;gap:8px;flex:1;justify-content:center;min-width:0}
+.hd-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.live-badge{
+  background:#ef4444;color:#fff;font-size:.62rem;font-weight:800;
+  padding:2px 7px;border-radius:20px;animation:pulse 1.5s infinite;
+  letter-spacing:.3px;flex-shrink:0
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.hd-date-chip{
+  background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);
+  border-radius:20px;padding:2px 10px;
+  font-size:.72rem;font-weight:700;color:var(--accent);white-space:nowrap
+}
+.clock{font-size:.75rem;color:var(--muted);font-family:ui-monospace,'SF Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.btn-back{
+  background:rgba(255,255,255,.07);color:var(--muted);
+  border:1px solid rgba(255,255,255,.12);
+  padding:4px 10px;border-radius:7px;cursor:pointer;
+  font-size:.72rem;font-weight:600;
+  text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all .18s
+}
+.btn-back:hover{color:var(--text);border-color:rgba(255,255,255,.25)}
+.btn-update{
+  background:rgba(16,185,129,.15);color:var(--accent3);
+  border:1px solid rgba(16,185,129,.35);
+  padding:4px 10px;border-radius:7px;cursor:pointer;
+  font-size:.72rem;font-weight:700;
+  display:inline-flex;align-items:center;gap:4px;transition:all .18s
+}
+.btn-update:hover{background:rgba(16,185,129,.25)}
+.btn-clear-hd{
+  background:rgba(239,68,68,.1);color:#f87171;
+  border:1px solid rgba(239,68,68,.25);
+  padding:4px 10px;border-radius:7px;cursor:pointer;
+  font-size:.72rem;font-weight:600;
+  display:inline-flex;align-items:center;gap:4px;transition:all .18s
+}
+.btn-clear-hd:hover{background:rgba(239,68,68,.2)}
+@keyframes updatePulse{0%,100%{box-shadow:none}}
+
+
+
+/* ── GAME TABS ───────────────────────────────────────────── */
+.tabs-wrap{background:var(--panel);border-bottom:1px solid var(--border);
+  padding:0 20px;overflow-x:auto;white-space:nowrap}
+.tabs{display:inline-flex;gap:4px;padding:8px 0}
+.tab-btn{background:transparent;border:none;color:var(--muted);cursor:pointer;
+  padding:8px 15px;border-radius:8px 8px 0 0;font-size:.8rem;font-weight:600;
+  transition:all .2s;white-space:nowrap}
+.tab-btn:hover{color:var(--text);background:var(--panel2)}
+.tab-btn.active{color:var(--accent);background:var(--panel2);
+  border-bottom:2px solid var(--accent)}
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────── */
+.main{padding:18px 20px;max-width:1600px;margin:0 auto}
+.game-panel{display:none}
+.game-panel.active{display:block}
+
+/* ── SECTION HEADER ──────────────────────────────────────── */
+.section-title{font-size:.92rem;font-weight:700;color:var(--accent);
+  text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;
+  display:flex;align-items:center;gap:8px}
+.section-title::before{content:'';display:block;width:4px;height:16px;
+  background:var(--accent);border-radius:2px}
+
+/* ── GRID LAYOUTS ────────────────────────────────────────── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+@media(max-width:1000px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+/* ── CARD ────────────────────────────────────────────────── */
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:14px;margin-bottom:14px}
+.card-sm{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px}
+
+/* ── INPUT AREA ──────────────────────────────────────────── */
+.input-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.input-row input,.input-row select{background:var(--panel2);border:1px solid var(--border);
+  color:var(--text);border-radius:8px;padding:7px 10px;font-size:.82rem;outline:none}
+.input-row input:focus,.input-row select:focus{border-color:var(--accent)}
+.btn{padding:7px 14px;border-radius:8px;border:none;cursor:pointer;
+  font-size:.8rem;font-weight:600;transition:all .2s}
+.btn-primary{background:var(--accent);color:#000}
+.btn-primary:hover{background:#d97706}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn-secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-green{background:var(--accent3);color:#000}
+.btn-green:hover{background:#059669}
+
+/* ── SCOREBOARD TABLE ────────────────────────────────────── */
+.sb-table{width:100%;border-collapse:collapse;font-size:.8rem}
+.sb-table th{background:var(--panel2);color:var(--muted);font-weight:600;
+  padding:7px 10px;text-align:left;border-bottom:1px solid var(--border)}
+.sb-table td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.sb-table tr:last-child td{border-bottom:none}
+.sb-table tr:hover td{background:rgba(255,255,255,.03)}
+.status-confirmed{color:var(--accent3);font-weight:700}
+.status-pending{color:var(--accent);font-weight:700}
+.status-partial{color:var(--accent2);font-weight:700}
+
+/* ── DIGIT BALLS ─────────────────────────────────────────── */
+.ball{display:inline-flex;align-items:center;justify-content:center;
+  width:30px;height:30px;border-radius:50%;font-weight:800;font-size:.85rem;
+  background:var(--panel2);border:2px solid var(--border)}
+/* two-digit numbers (10+) — wider pill so digits don't overflow the circle */
+.ball.ball-2d{width:38px;height:30px;border-radius:15px;font-size:.76rem;letter-spacing:0}
+.ball-p1{border-color:var(--p1);color:var(--p1)}
+.ball-p2{border-color:var(--p2);color:var(--p2)}
+.ball-p3{border-color:var(--p3);color:var(--p3)}
+.ball-p4{border-color:var(--p4);color:var(--p4)}
+.ball-p5{border-color:var(--p5);color:var(--p5)}
+.ball-unknown{border-color:var(--muted);color:var(--muted)}
+.ball-hot{background:#7f1d1d;border-color:var(--hot);color:#fca5a5}
+.ball-warm{background:#7c2d12;border-color:var(--warm);color:#fdba74}
+.ball-cold{background:#1e3a5f;border-color:var(--cold);color:#93c5fd}
+.ball-absent{background:#1f2937;border-color:var(--absent);color:#4b5563}
+.ball-lg{width:40px;height:40px;font-size:1rem}
+.balls-row{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+
+/* ── FREQUENCY BAR ───────────────────────────────────────── */
+.freq-bar-wrap{background:var(--panel2);border-radius:4px;height:14px;width:100%;overflow:hidden}
+.freq-bar{height:14px;border-radius:4px;transition:width .5s ease}
+.freq-hot{background:linear-gradient(90deg,#dc2626,#f97316)}
+.freq-warm{background:linear-gradient(90deg,#d97706,#f59e0b)}
+.freq-cold{background:linear-gradient(90deg,#1d4ed8,#3b82f6)}
+.freq-zero{background:#374151}
+
+/* ── POSITION MAP ────────────────────────────────────────── */
+.pos-map{display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-bottom:6px}
+.pos-cell{border-radius:5px;padding:5px 2px;text-align:center;font-size:.72rem;font-weight:700;
+  border:1px solid var(--border);transition:all .3s}
+.pos-seen{background:#1a3a2a;border-color:var(--accent3);color:var(--accent3)}
+.pos-missing{background:#1f2937;border-color:#374151;color:#4b5563}
+.pos-hot{background:#4a1010;border-color:var(--hot);color:#fca5a5}
+.pos-label{font-size:.68rem;color:var(--muted);margin-bottom:4px;font-weight:600}
+
+/* ── BIAS BADGE ──────────────────────────────────────────── */
+.bias-list{display:flex;flex-direction:column;gap:5px}
+.bias-item{display:flex;align-items:center;gap:8px;padding:6px 10px;
+  border-radius:6px;font-size:.78rem}
+.bias-red{background:#4a1010;border:1px solid #7f1d1d}
+.bias-yellow{background:#3d2a05;border:1px solid #78350f}
+.bias-green{background:#052e16;border:1px solid #166534}
+.bias-blue{background:#0c1a3d;border:1px solid #1e3a8a}
+
+/* ── PICKS PANEL ─────────────────────────────────────────── */
+.picks-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.pick-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+  padding:10px;text-align:center}
+.pick-card .pick-label{font-size:.68rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:5px}
+.pick-card .pick-nums{font-size:1.3rem;font-weight:800;letter-spacing:4px}
+.pick-gold{border-color:var(--accent);background:#1a1000}
+.pick-gold .pick-nums{color:var(--accent)}
+.pick-silver{border-color:#94a3b8}
+.pick-silver .pick-nums{color:#94a3b8}
+.pick-bronze{border-color:#b45309}
+.pick-bronze .pick-nums{color:#d97706}
+.pick-box{border-color:var(--accent3)}
+.pick-box .pick-nums{color:var(--accent3);letter-spacing:6px}
+
+
+
+/* ── SUMMARY BANNER ──────────────────────────────────────── */
+.summary-banner{background:linear-gradient(135deg,#0f172a,#1e1b4b);
+  border:1px solid var(--accent);border-radius:12px;padding:12px 16px;
+  margin-bottom:14px;display:grid;
+  grid-template-columns:repeat(7,1fr);gap:6px}
+.summary-banner.sb-8{grid-template-columns:repeat(8,1fr)}
+@media(max-width:1000px){.summary-banner.sb-8{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:900px){.summary-banner{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:560px){.summary-banner,.summary-banner.sb-8{grid-template-columns:repeat(2,1fr)}}
+.sb-item{text-align:center;min-width:0}
+.sb-item .sb-val{font-size:1.1rem;font-weight:800;color:var(--accent);word-break:break-word;line-height:1.3;white-space:normal}
+.sb-item .sb-val.sb-val-sm{font-size:.78rem;font-weight:700}
+.sb-item .sb-key{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+
+/* ── ALERT BOX ───────────────────────────────────────────── */
+.alert{border-radius:8px;padding:9px 12px;font-size:.8rem;margin-bottom:8px;
+  display:flex;align-items:flex-start;gap:8px}
+.alert-warn{background:#3d2a05;border:1px solid #78350f;color:#fcd34d}
+.alert-info{background:#0c1a3d;border:1px solid #1e3a8a;color:#93c5fd}
+.alert-success{background:#052e16;border:1px solid #166534;color:#6ee7b7}
+
+/* ── POWERBALL / MEGA SPECIFIC ───────────────────────────── */
+.big-ball{display:inline-flex;align-items:center;justify-content:center;
+  width:44px;height:44px;border-radius:50%;font-weight:800;font-size:.92rem;margin:3px}
+/* two-digit jackpot numbers (10+) — pill shape so digits don't overflow */
+.big-ball.ball-2d{width:52px;height:44px;border-radius:22px;font-size:.82rem;letter-spacing:0}
+.wb{background:radial-gradient(circle at 35% 35%,#fff,#d1d5db);color:#111;border:2px solid #9ca3af}
+.pb{background:radial-gradient(circle at 35% 35%,#ef4444,#b91c1c);color:#fff;border:2px solid #7f1d1d}
+.mb{background:radial-gradient(circle at 35% 35%,#f59e0b,#d97706);color:#111;border:2px solid #92400e}
+.slmega{background:radial-gradient(circle at 35% 35%,#34d399,#059669);color:#fff;border:2px solid #065f46}
+
+/* ── DRAW TIME TABS ───────────────────────────────────────── */
+.draw-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.draw-tab{padding:5px 13px;border-radius:20px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--muted);cursor:pointer;font-size:.76rem;font-weight:600;transition:all .2s}
+.draw-tab.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.draw-tab:hover:not(.active){border-color:var(--accent);color:var(--accent)}
+
+/* ── STATUS FILTER BAR ────────────────────────────────────── */
+.status-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.status-filter-bar label{font-size:.72rem;color:var(--muted);font-weight:600;margin-right:2px}
+.sf-btn{padding:4px 12px;border-radius:20px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--muted);cursor:pointer;font-size:.73rem;font-weight:600;transition:all .2s}
+.sf-btn:hover{border-color:var(--accent);color:var(--accent)}
+.sf-btn.sf-all.active{background:var(--panel2);border-color:var(--text);color:var(--text)}
+.sf-btn.sf-confirmed.active{background:#052e16;border-color:var(--accent3);color:var(--accent3)}
+.sf-btn.sf-partial.active{background:#0c1a3d;border-color:var(--accent2);color:var(--accent2)}
+.sf-btn.sf-pending.active{background:#3d2a05;border-color:var(--accent);color:var(--accent)}
+
+/* ── INLINE ROW ACTIONS ───────────────────────────────────── */
+.btn-confirm{padding:2px 8px;border-radius:6px;border:1px solid var(--accent3);
+  background:rgba(16,185,129,.15);color:var(--accent3);cursor:pointer;font-size:.68rem;font-weight:700;transition:all .2s}
+.btn-confirm:hover{background:var(--accent3);color:#000}
+.btn-edit{padding:2px 8px;border-radius:6px;border:1px solid var(--accent2);
+  background:rgba(59,130,246,.15);color:var(--accent2);cursor:pointer;font-size:.68rem;font-weight:700;transition:all .2s}
+.btn-edit:hover{background:var(--accent2);color:#fff}
+
+/* ── MISC ────────────────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--panel)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.divider{border:none;border-top:1px solid var(--border);margin:12px 0}
+.mb12{margin-bottom:12px} .mb14{margin-bottom:14px}
+.text-muted{color:var(--muted);font-size:.76rem}
+.text-accent{color:var(--accent)} .text-green{color:var(--accent3)}
+.text-red{color:var(--hot)} .text-blue{color:var(--accent2)}
+.bold{font-weight:700}
+.changed{animation:highlight .8s ease}
+@keyframes highlight{0%{background:#1a3300}100%{background:transparent}}
+
+/* ── PRINT BUTTON ───────────────────────────────────────── */
+.btn-print{
+  background:rgba(139,92,246,.15);color:var(--accent5);
+  border:1px solid rgba(139,92,246,.35);
+  padding:4px 10px;border-radius:7px;cursor:pointer;
+  font-size:.72rem;font-weight:700;
+  display:inline-flex;align-items:center;gap:4px;transition:all .18s
+}
+.btn-print:hover{background:rgba(139,92,246,.25)}
+
+/* ═══════════════════════════════════════════════════════════
+   PRINT STYLES — Clean, ink-friendly output
+   ═══════════════════════════════════════════════════════════ */
+@media print{
+  /* ── Page setup ──────────────────────────────────────── */
+  @page{size:landscape;margin:10mm 8mm}
+
+  /* ── Reset dark theme → white for printing ──────────── */
+  *{color-adjust:exact;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  body{background:#fff!important;color:#111!important;font-size:9pt;-webkit-print-color-adjust:exact}
+
+  /* ── Hide non-printable elements ─────────────────────── */
+  .header,
+  .tabs-wrap,
+  .draw-tabs,
+  .input-row,
+  .btn,.btn-primary,.btn-danger,.btn-secondary,.btn-green,
+  .btn-confirm,.btn-edit,
+  .btn-update,.btn-clear-hd,.btn-back,.btn-print,
+  .status-filter-bar,
+  .sf-btn,
+  #sb-toast,
+  select,
+  input{
+    display:none!important
+  }
+
+  /* Hide ALL Add Result / Add Draw form cards (cross-browser) */
+  .add-result-card{
+    display:none!important
+  }
+
+  /* ── Print header — shows game + date ────────────────── */
+  .print-header{
+    display:block!important;
+    text-align:center;
+    padding:6pt 0 8pt;
+    border-bottom:2pt solid #111;
+    margin-bottom:10pt;
+    page-break-after:avoid
+  }
+  .print-header h1{font-size:15pt;margin:0 0 2pt;color:#111;font-weight:800;letter-spacing:-.3px}
+  .print-header p{font-size:8pt;color:#555;margin:0}
+
+  /* ── Show only the active game panel ─────────────────── */
+  .game-panel{display:none!important}
+  .game-panel.active{display:block!important}
+
+  /* ── Main container ─────────────────────────────────── */
+  .main{padding:0!important;max-width:100%!important;margin:0!important}
+
+  /* ── Cards: remove dark backgrounds ──────────────────── */
+  .card,.card-sm{
+    background:#fff!important;
+    border:1pt solid #ccc!important;
+    border-radius:3pt!important;
+    padding:6pt 8pt!important;
+    margin-bottom:6pt!important;
+    page-break-inside:avoid;
+    box-shadow:none!important
+  }
+
+  /* ── Section titles ──────────────────────────────────── */
+  .section-title{
+    color:#111!important;
+    font-size:9pt!important;
+    margin-bottom:6pt!important;
+    page-break-after:avoid
+  }
+  .section-title::before{
+    background:#333!important
+  }
+
+  /* ── Grid: side-by-side on landscape for efficient space use ── */
+  .grid-2{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:6pt!important
+  }
+  .grid-3{
+    display:grid!important;
+    grid-template-columns:1fr 1fr 1fr!important;
+    gap:6pt!important
+  }
+  .grid-2 > div,.grid-3 > div{
+    width:100%!important;
+    min-width:0!important
+  }
+
+  /* ── Tables ──────────────────────────────────────────── */
+  .sb-table{
+    width:100%!important;
+    font-size:7.5pt!important;
+    border-collapse:collapse!important
+  }
+  .sb-table th{
+    background:#f0f0f0!important;
+    color:#111!important;
+    border:1pt solid #bbb!important;
+    padding:3pt 5pt!important;
+    font-weight:700
+  }
+  .sb-table td{
+    border:1pt solid #ccc!important;
+    padding:3pt 5pt!important;
+    color:#111!important
+  }
+  .sb-table tr:hover td{background:transparent!important}
+  /* Hide action column (delete/edit) */
+  .sb-table th:last-child,
+  .sb-table td:last-child{
+    display:none!important
+  }
+
+  /* ── Digit balls: ink-friendly ──────────────────────── */
+  .ball{
+    background:#fff!important;
+    border:1.5pt solid #333!important;
+    color:#111!important;
+    font-weight:800;
+    width:24px!important;height:24px!important;font-size:8pt!important
+  }
+  .ball.ball-2d{width:32px!important;height:24px!important;border-radius:12px!important;font-size:7.5pt!important}
+  .ball-p1{border-color:#b45309!important;color:#92400e!important}
+  .ball-p2{border-color:#1d4ed8!important;color:#1e40af!important}
+  .ball-p3{border-color:#047857!important;color:#065f46!important}
+  .ball-p4{border-color:#7c3aed!important;color:#6d28d9!important}
+  .ball-p5{border-color:#be185d!important;color:#9d174d!important}
+  .ball-unknown{border-color:#999!important;color:#999!important}
+
+  /* Big jackpot balls (Powerball/Mega/Lucky 5) */
+  .big-ball{
+    margin:2pt!important;
+    width:32px!important;height:32px!important;font-size:9pt!important;
+    line-height:32px!important
+  }
+  .big-ball.ball-2d{width:40px!important;height:32px!important;border-radius:16px!important;font-size:8.5pt!important}
+  .wb{background:#f5f5f5!important;color:#111!important;border:1.5pt solid #666!important}
+  .pb{background:#fee2e2!important;color:#991b1b!important;border:1.5pt solid #b91c1c!important}
+  .mb{background:#fef3c7!important;color:#92400e!important;border:1.5pt solid #d97706!important}
+  .slmega{background:#d1fae5!important;color:#065f46!important;border:1.5pt solid #059669!important}
+
+  /* Balls row: consistent spacing */
+  .balls-row{gap:3pt!important;flex-wrap:wrap!important}
+
+  /* Draw row for PB/MM/L5 scoreboard entries */
+  .draw-row{
+    border-bottom:1pt solid #e0e0e0!important;
+    padding:4pt 0!important;
+    page-break-inside:avoid
+  }
+
+  /* ── Summary banner ──────────────────────────────────── */
+  .summary-banner{
+    background:#f8f9fa!important;
+    border:1pt solid #bbb!important;
+    border-radius:3pt!important;
+    page-break-inside:avoid;
+    grid-template-columns:repeat(auto-fit,minmax(80pt,1fr))!important
+  }
+  .sb-item{padding:4pt 3pt!important}
+  .sb-item .sb-val{color:#111!important;font-size:9pt!important}
+  .sb-item .sb-val.text-red{color:#b91c1c!important}
+  .sb-item .sb-val.text-blue{color:#1d4ed8!important}
+  .sb-item .sb-val.text-muted{color:#666!important}
+  .sb-item .sb-val.text-accent{color:#92400e!important}
+  .sb-item .sb-val.text-green{color:#047857!important}
+  .sb-item .sb-key{color:#444!important;font-size:6.5pt!important}
+
+  /* ── Frequency bars ─────────────────────────────────── */
+  .freq-bar-wrap{background:#e5e7eb!important;border:1pt solid #ccc!important;height:10pt!important}
+  .freq-bar{-webkit-print-color-adjust:exact;print-color-adjust:exact;height:10pt!important}
+  .freq-hot{background:#ef4444!important}
+  .freq-warm{background:#f59e0b!important}
+  .freq-cold{background:#3b82f6!important}
+  .freq-zero{background:#d1d5db!important}
+
+  /* Frequency table compact */
+  .freq-table{font-size:7.5pt!important}
+  .freq-table th,.freq-table td{padding:2pt 4pt!important}
+
+  /* ── Position map cells ─────────────────────────────── */
+  .pos-map{grid-template-columns:repeat(10,1fr)!important}
+  .pos-cell{border:1pt solid #ccc!important;font-size:6.5pt!important;padding:2pt 1pt!important}
+  .pos-seen{background:#d1fae5!important;border-color:#059669!important;color:#065f46!important}
+  .pos-missing{background:#f3f4f6!important;border-color:#d1d5db!important;color:#9ca3af!important}
+  .pos-hot{background:#fee2e2!important;border-color:#ef4444!important;color:#991b1b!important}
+
+  /* ── Bias list ───────────────────────────────────────── */
+  .bias-item{border:1pt solid #ccc!important;background:#f8f9fa!important;color:#111!important;
+    font-size:7.5pt!important;padding:3pt 6pt!important;margin-bottom:3pt!important}
+  .bias-red{border-color:#fca5a5!important;background:#fef2f2!important}
+  .bias-yellow{border-color:#fcd34d!important;background:#fffbeb!important}
+  .bias-green{border-color:#6ee7b7!important;background:#f0fdf4!important}
+  .bias-blue{border-color:#93c5fd!important;background:#eff6ff!important}
+
+  /* ── Picks cards ─────────────────────────────────────── */
+  .picks-grid{grid-template-columns:repeat(auto-fill,minmax(80pt,1fr))!important;gap:4pt!important}
+  .pick-card{background:#fff!important;border:1pt solid #ccc!important;padding:4pt!important}
+  .pick-card .pick-label{color:#444!important;font-size:6.5pt!important}
+  .pick-card .pick-nums{color:#111!important;font-size:9pt!important}
+  .pick-gold{border-color:#b45309!important}
+  .pick-gold .pick-nums{color:#92400e!important}
+  .pick-silver .pick-nums{color:#374151!important}
+  .pick-bronze .pick-nums{color:#b45309!important}
+  .pick-box .pick-nums{color:#047857!important}
+
+  /* ── Status text ─────────────────────────────────────── */
+  .status-confirmed{color:#047857!important}
+  .status-pending{color:#b45309!important}
+  .status-partial{color:#1d4ed8!important}
+
+  /* ── Misc text ──────────────────────────────────────── */
+  .text-muted{color:#666!important}
+  .text-accent{color:#92400e!important}
+  .text-green{color:#047857!important}
+  .text-red{color:#b91c1c!important}
+  .text-blue{color:#1d4ed8!important}
+
+  /* ── Alerts ──────────────────────────────────────────── */
+  .alert{border:1pt solid #ccc!important;background:#f8f9fa!important;color:#111!important;
+    font-size:7.5pt!important;padding:4pt 6pt!important}
+  .alert-warn{border-color:#fcd34d!important;background:#fffbeb!important}
+  .alert-info{border-color:#93c5fd!important;background:#eff6ff!important}
+  .alert-success{border-color:#6ee7b7!important;background:#f0fdf4!important}
+
+  /* ── Scrollbar / animations: suppress ────────────────── */
+  ::-webkit-scrollbar{display:none!important}
+  *{animation:none!important;transition:none!important}
+
+  /* ── Page breaks ─────────────────────────────────────── */
+  .card{page-break-inside:avoid}
+  .summary-banner{page-break-inside:avoid}
+  .grid-2{page-break-inside:avoid}
+  table{page-break-inside:auto}
+  tr{page-break-inside:avoid;page-break-after:auto}
+  thead{display:table-header-group}
+
+  /* ── Dividers ────────────────────────────────────────── */
+  .divider{border-top:1pt solid #ccc!important}
+
+  /* ── Print footer (page URL) ─────────────────────────── */
+  .print-footer{
+    display:block!important;
+    text-align:center;
+    font-size:7pt;
+    color:#999;
+    margin-top:8pt;
+    padding-top:4pt;
+    border-top:1pt solid #ddd
+  }
+}
+
+/* Hide print-only elements on screen */
+.print-header{display:none}
+.print-footer{display:none}
+
+
+.tl-box.tl-target{border-color:var(--accent5);background:#1a0a2e;
+  box-shadow:0 0 8px rgba(139,92,246,.4)}
+.tl-state-name{font-weight:700;font-size:.7rem;color:var(--text)}
+.tl-nums{font-weight:800;letter-spacing:2px;color:var(--accent3);font-size:.72rem}
+.tl-time{font-size:.6rem;color:var(--muted);margin-top:1px}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN — ALL DEVICES
+   Breakpoints: ≤1024 tablet-landscape, ≤768 tablet, ≤600 phablet, ≤480 mobile, ≤360 small
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Tablet landscape (≤1024px) ──────────────────────────── */
+@media(max-width:1024px){
+  .main{padding:14px 16px}
+  .header{height:48px;padding:0 14px}
+}
+
+/* ── Tablet portrait (≤768px) ────────────────────────────── */
+@media(max-width:768px){
+  /* Header: wrap into 2 rows */
+  .header{height:auto;min-height:44px;padding:6px 12px;flex-wrap:wrap;gap:4px}
+  .hd-left{gap:6px}
+  .hd-center{order:3;width:100%;justify-content:flex-start;gap:6px;padding-bottom:2px}
+  .hd-right{gap:4px}
+  .hd-title{font-size:.78rem}
+  .hd-logo{font-size:1rem}
+  .btn-back,.btn-update,.btn-clear-hd,.btn-print{padding:4px 9px;font-size:.68rem}
+
+  /* Tabs: horizontal scroll with fade hint */
+  .tabs-wrap{padding:0 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .tabs-wrap::-webkit-scrollbar{display:none}
+  .tabs{gap:3px}
+  .tab-btn{padding:7px 12px;font-size:.75rem}
+
+  /* Main padding */
+  .main{padding:12px 12px}
+
+  /* Cards */
+  .card{padding:12px}
+
+  /* Input row: stack on small screens */
+  .input-row{gap:6px}
+  .input-row input,.input-row select{padding:6px 8px;font-size:.78rem}
+  .btn{padding:6px 12px;font-size:.76rem}
+
+  /* Grids collapse */
+  .grid-2,.grid-3{grid-template-columns:1fr}
+
+  /* Scoreboard table */
+  .sb-table{font-size:.74rem}
+  .sb-table th,.sb-table td{padding:5px 7px}
+
+  /* Balls */
+  .ball{width:28px;height:28px;font-size:.8rem}
+  .ball.ball-2d{width:36px;height:28px;border-radius:14px;font-size:.72rem}
+  .big-ball{width:40px;height:40px;font-size:.84rem;margin:2px}
+  .big-ball.ball-2d{width:48px;height:40px;border-radius:20px;font-size:.76rem}
+
+  /* Picks grid */
+  .picks-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr))}
+  .pick-card .pick-nums{font-size:1.1rem;letter-spacing:3px}
+
+  /* Section titles */
+  .section-title{font-size:.82rem;letter-spacing:.6px}
+
+  /* Summary banner */
+  .summary-banner{grid-template-columns:repeat(3,1fr)}
+  .summary-banner.sb-8{grid-template-columns:repeat(4,1fr)}
+  .sb-item .sb-val{font-size:.95rem}
+
+  /* Position map */
+  .pos-map{grid-template-columns:repeat(8,1fr)}
+}
+
+/* ── Phablet (≤600px) ────────────────────────────────────── */
+@media(max-width:600px){
+  /* Header: compact two-row layout */
+  .header{padding:5px 10px;gap:4px}
+  .hd-title{display:none}
+  .hd-date-chip{font-size:.64rem;padding:2px 6px}
+  .clock{font-size:.60rem}
+  .live-badge{font-size:.58rem;padding:2px 5px}
+  .btn-back,.btn-update,.btn-clear-hd,.btn-print{padding:3px 8px;font-size:.65rem}
+
+  /* Tabs */
+  .tabs-wrap{padding:0 8px}
+  .tab-btn{padding:6px 10px;font-size:.72rem}
+
+  /* Main */
+  .main{padding:10px 10px}
+  .card{padding:10px;border-radius:10px}
+
+  /* Tables: make horizontally scrollable */
+  .card > .sb-table-wrap,.card .freq-table-wrap,
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .sb-table{font-size:.7rem;min-width:340px}
+  .sb-table th,.sb-table td{padding:4px 5px;white-space:nowrap}
+
+  /* Input row: wrap vertically */
+  .input-row{flex-direction:column;align-items:stretch}
+  .input-row input,.input-row select,.input-row .btn{width:100% !important;max-width:100%;font-size:.82rem}
+  .input-row input[style*="width"],.input-row select[style*="width"]{width:100% !important}
+
+  /* Balls */
+  .ball{width:26px;height:26px;font-size:.76rem}
+  .ball.ball-2d{width:34px;height:26px;border-radius:13px;font-size:.7rem}
+  .big-ball{width:38px;height:38px;font-size:.8rem;margin:2px}
+  .big-ball.ball-2d{width:46px;height:38px;border-radius:19px;font-size:.74rem}
+  .balls-row{gap:3px}
+
+  /* Picks grid */
+  .picks-grid{grid-template-columns:repeat(2,1fr)}
+  .pick-card .pick-nums{font-size:1rem;letter-spacing:2px}
+
+  /* Summary banner */
+  .summary-banner,.summary-banner.sb-8{grid-template-columns:repeat(2,1fr)}
+  .sb-item .sb-val{font-size:.88rem}
+  .sb-item .sb-key{font-size:.58rem}
+
+  /* Section titles */
+  .section-title{font-size:.78rem}
+
+  /* Draw tabs */
+  .draw-tab{padding:4px 10px;font-size:.7rem}
+
+  /* Status filter */
+  .sf-btn{padding:3px 9px;font-size:.68rem}
+
+  /* Freq bar */
+  .freq-bar-wrap{height:12px}
+  .freq-bar{height:12px}
+
+  /* Position map: 5 columns on mobile */
+  .pos-map{grid-template-columns:repeat(5,1fr)}
+  .pos-cell{padding:4px 1px;font-size:.66rem}
+
+  /* Bias list */
+  .bias-item{font-size:.72rem;padding:5px 8px}
+}
+
+/* ── Small mobile (≤480px) ───────────────────────────────── */
+@media(max-width:480px){
+  /* Header: ultra-compact */
+  .header{padding:4px 8px;gap:3px}
+  .hd-left{gap:4px}
+  .hd-right{gap:3px}
+  .hd-center{gap:4px;padding-bottom:1px}
+  .btn-back{font-size:.62rem;padding:3px 6px}
+  .btn-update,.btn-clear-hd,.btn-print{font-size:.60rem;padding:3px 6px}
+  .live-badge{font-size:.55rem;padding:1px 4px}
+  .hd-date-chip{font-size:.60rem;padding:1px 5px}
+  .clock{display:none}
+
+  /* Tabs: smaller text */
+  .tabs-wrap{padding:0 6px}
+  .tab-btn{font-size:.68rem;padding:5px 9px}
+
+  /* Main */
+  .main{padding:8px 8px}
+  .card{padding:8px 9px;border-radius:9px}
+
+  /* Balls */
+  .ball{width:24px;height:24px;font-size:.72rem}
+  .ball.ball-2d{width:32px;height:24px;border-radius:12px;font-size:.66rem}
+  .big-ball{width:34px;height:34px;font-size:.76rem;margin:2px}
+  .big-ball.ball-2d{width:42px;height:34px;border-radius:17px;font-size:.7rem}
+
+  /* Picks */
+  .picks-grid{grid-template-columns:1fr 1fr}
+  .pick-card .pick-nums{font-size:.95rem;letter-spacing:2px}
+
+  /* Summary banner */
+  .summary-banner,.summary-banner.sb-8{grid-template-columns:repeat(2,1fr)}
+  .sb-item{padding:6px 4px}
+  .sb-item .sb-val{font-size:.82rem}
+  .sb-item .sb-key{font-size:.54rem}
+}
+
+/* ── Extra small (≤360px) ─────────────────────────────────── */
+@media(max-width:360px){
+  .header{padding:3px 6px;gap:2px}
+  .hd-logo{display:none}
+  .hd-center{gap:3px}
+  .btn-back{font-size:.58rem;padding:2px 5px}
+  .btn-update,.btn-clear-hd,.btn-print{font-size:.56rem;padding:2px 5px}
+  .main{padding:6px 6px}
+  .card{padding:7px 8px}
+  .tab-btn{font-size:.64rem;padding:4px 7px}
+  .ball{width:22px;height:22px;font-size:.68rem}
+  .ball.ball-2d{width:30px;height:22px;border-radius:11px;font-size:.62rem}
+  .big-ball{width:30px;height:30px;font-size:.7rem}
+  .big-ball.ball-2d{width:38px;height:30px;border-radius:15px;font-size:.64rem}
+  .picks-grid{grid-template-columns:1fr}
+  .pick-card .pick-nums{font-size:.9rem;letter-spacing:1px}
+}
+
+/* ── Touch targets: min 36px for interactive elements ──────── */
+@media(max-width:768px){
+  .btn,.btn-primary,.btn-danger,.btn-secondary,.btn-green,
+  .btn-update,.btn-clear-hd,.btn-back,.btn-print,
+  .tab-btn,.draw-tab,.sf-btn,.btn-confirm,.btn-edit{min-height:36px;display:inline-flex;align-items:center;justify-content:center}
+  input,select{min-height:36px}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ HEADER ═══════════════════════ -->
+<header class="header">
+  <div class="hd-left">
+    <a class="btn-back" href="/">← Main</a>
+    <span class="hd-logo">🎰</span>
+    <span class="hd-title"><span>Lotto</span> Scoreboard</span>
+  </div>
+  <div class="hd-center">
+    <span class="live-badge">● LIVE</span>
+    <span class="hd-date-chip" id="today-label">Today</span>
+    <span class="clock" id="clock">--:--:-- ET</span>
+  </div>
+  <div class="hd-right">
+    <button class="btn-update" onclick="refreshAll()">↺ Update</button>
+    <button class="btn-clear-hd" onclick="clearAll()">× Clear</button>
+    <button class="btn-print" onclick="printScoreboard()">🖨 Print</button>
+  </div>
+</header>
+
+<!-- ═══════════════════════ GAME TABS ═══════════════════════ -->
+<div class="tabs-wrap">
+  <div class="tabs">
+    <button class="tab-btn active" data-game="pick3"   onclick="switchGame('pick3',this)">🎯 Pick 3</button>
+    <button class="tab-btn"        data-game="pick4"   onclick="switchGame('pick4',this)">🎲 Pick 4</button>
+    <button class="tab-btn"        data-game="pick5"   onclick="switchGame('pick5',this)">🎳 Pick 5</button>
+    <button class="tab-btn"        data-game="pick6"   onclick="switchGame('pick6',this)">🎰 Pick 6</button>
+    <button class="tab-btn"        data-game="cash3"   onclick="switchGame('cash3',this)">💵 Cash 3</button>
+    <button class="tab-btn"        data-game="daily3"  onclick="switchGame('daily3',this)">📅 Daily 3</button>
+    <button class="tab-btn"        data-game="powerball"     onclick="switchGame('powerball',this)">🔴 Powerball</button>
+    <button class="tab-btn"        data-game="megamillions"  onclick="switchGame('megamillions',this)">💛 Mega Millions</button>
+    <button class="tab-btn"        data-game="lucky5"  onclick="switchGame('lucky5',this)">⭐ 5+Bonus</button>
+  </div>
+</div>
+
+<div class="print-header">
+  <h1 id="print-title">Lotto Scoreboard</h1>
+  <p id="print-sub"></p>
+</div>
+
+<div class="main">
+
+
+
+<!-- ════════ PICK 3 ════════ -->
+<div id="panel-pick3" class="game-panel active">
+  <div class="draw-tabs" id="pick3DrawTabs">
+    <div class="draw-tab active" onclick="setDraw('pick3','midday',this)">☀️ Midday</div>
+    <div class="draw-tab"       onclick="setDraw('pick3','evening',this)">🌆 Evening</div>
+    <div class="draw-tab"       onclick="setDraw('pick3','night',this)">🌙 Night</div>
+  </div>
+  <!-- Part 1 — Live Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
+    <div id="p3-filter-bar"></div>
+    <table class="sb-table">
+      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>WB</th><th>Status</th><th></th></tr></thead>
+      <tbody id="p3-tbody"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:18px">No results yet — add a draw above</td></tr></tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 Part 2 — Digit Frequency Table</div>
+        <div id="p3-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
+      </div>
+      <div class="card mb14">
+        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
+        <div id="p3-posmaps"><div class="text-muted" style="padding:8px">Add results to see position maps.</div></div>
+      </div>
+      <div class="card">
+        <div class="section-title">🔍 Part 4 — Positional Bias Detection</div>
+        <div id="p3-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">📸 Part 6 — Summary Snapshot</div>
+        <div id="p3-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="p3-summary" class="summary-banner sb-8 mb14">
+    <div class="sb-item"><div class="sb-val" id="p3-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="p3-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="p3-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="p3-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"    id="p3-s-hot">—</div><div class="sb-key">🔥 Hottest Digit</div></div>
+    <div class="sb-item"><div class="sb-val text-blue"   id="p3-s-cold">—</div><div class="sb-key">❄️ Coldest</div></div>
+    <div class="sb-item"><div class="sb-val text-muted"  id="p3-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="p3-s-pick">—</div><div class="sb-key">🎯 Top Pick</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Result</div>
+    <div class="input-row">
+      <input type="text" id="p3-state" placeholder="State (GA)" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="p3-n1" placeholder="P1" maxlength="1" style="width:54px" oninput="autoTab(this,'p3-n2')"/>
+      <input type="text" id="p3-n2" placeholder="P2" maxlength="1" style="width:54px" oninput="autoTab(this,'p3-n3')"/>
+      <input type="text" id="p3-n3" placeholder="P3" maxlength="1" style="width:54px"/>
+      <input type="text" id="p3-wb" placeholder="WB/FB" maxlength="2" style="width:64px"/>
+      <select id="p3-status" style="width:125px">
+        <option value="confirmed">✅ Confirmed</option>
+        <option value="partial">🔷 Partial</option>
+        <option value="pending">⏳ Pending</option>
+      </select>
+      <button class="btn btn-primary" onclick="addPick3()">Add</button>
+      <button class="btn btn-secondary" onclick="addPendingPick3()">+ Pending</button>
+    </div>
+    <div id="p3-error" class="text-red" style="font-size:.76rem;margin-top:2px"></div>
+  </div>
+</div>
+
+<!-- ════════ PICK 4 ════════ -->
+<div id="panel-pick4" class="game-panel">
+  <div class="draw-tabs">
+    <div class="draw-tab active" onclick="setDraw('pick4','midday',this)">☀️ Midday</div>
+    <div class="draw-tab"       onclick="setDraw('pick4','evening',this)">🌆 Evening</div>
+    <div class="draw-tab"       onclick="setDraw('pick4','night',this)">🌙 Night</div>
+  </div>
+  <!-- Part 1 — Live Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
+    <div id="p4-filter-bar"></div>
+    <table class="sb-table">
+      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>Status</th><th></th></tr></thead>
+      <tbody id="p4-tbody"><tr><td colspan="7" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 Part 2 — Digit Frequency</div>
+        <div id="p4-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
+      </div>
+      <div class="card mb14">
+        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
+        <div id="p4-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
+      </div>
+      <div class="card">
+        <div class="section-title">🔍 Part 4 — Positional Bias Detection</div>
+        <div id="p4-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">📸 Part 6 — Summary Snapshot</div>
+        <div id="p4-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="p4-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="p4-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="p4-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="p4-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="p4-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="p4-s-hot">—</div><div class="sb-key">🔥 Hottest</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="p4-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="p4-s-pick">—</div><div class="sb-key">🎯 Top Pick</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Result</div>
+    <div class="input-row">
+      <input type="text" id="p4-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="p4-n1" placeholder="P1" maxlength="1" style="width:52px" oninput="autoTab(this,'p4-n2')"/>
+      <input type="text" id="p4-n2" placeholder="P2" maxlength="1" style="width:52px" oninput="autoTab(this,'p4-n3')"/>
+      <input type="text" id="p4-n3" placeholder="P3" maxlength="1" style="width:52px" oninput="autoTab(this,'p4-n4')"/>
+      <input type="text" id="p4-n4" placeholder="P4" maxlength="1" style="width:52px"/>
+      <input type="text" id="p4-wb" placeholder="WB" maxlength="2" style="width:58px"/>
+      <select id="p4-status" style="width:125px">
+        <option value="confirmed">✅ Confirmed</option>
+        <option value="partial">🔷 Partial</option>
+        <option value="pending">⏳ Pending</option>
+      </select>
+      <button class="btn btn-primary" onclick="addPickN('pick4',4)">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ PICK 5 ════════ -->
+<div id="panel-pick5" class="game-panel">
+  <div class="draw-tabs">
+    <div class="draw-tab active" onclick="setDraw('pick5','midday',this)">☀️ Midday</div>
+    <div class="draw-tab"       onclick="setDraw('pick5','evening',this)">🌆 Evening</div>
+  </div>
+  <!-- Part 1 — Live Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
+    <div id="p5-filter-bar"></div>
+    <table class="sb-table">
+      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>Status</th><th></th></tr></thead>
+      <tbody id="p5-tbody"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 Part 2 — Digit Frequency</div>
+        <div id="p5-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
+      </div>
+      <div class="card mb14">
+        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
+        <div id="p5-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
+      </div>
+      <div class="card">
+        <div class="section-title">🔍 Part 4 — Positional Bias Detection</div>
+        <div id="p5-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">📸 Part 6 — Summary Snapshot</div>
+        <div id="p5-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="p5-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="p5-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="p5-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="p5-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="p5-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="p5-s-hot">—</div><div class="sb-key">🔥 Hottest</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="p5-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="p5-s-pick">—</div><div class="sb-key">🎯 Top Pick</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Result</div>
+    <div class="input-row">
+      <input type="text" id="p5-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="p5-n1" placeholder="P1" maxlength="2" style="width:52px" oninput="autoTab2(this,'p5-n2')"/>
+      <input type="text" id="p5-n2" placeholder="P2" maxlength="2" style="width:52px" oninput="autoTab2(this,'p5-n3')"/>
+      <input type="text" id="p5-n3" placeholder="P3" maxlength="2" style="width:52px" oninput="autoTab2(this,'p5-n4')"/>
+      <input type="text" id="p5-n4" placeholder="P4" maxlength="2" style="width:52px" oninput="autoTab2(this,'p5-n5')"/>
+      <input type="text" id="p5-n5" placeholder="P5" maxlength="2" style="width:52px"/>
+      <select id="p5-status" style="width:125px">
+        <option value="confirmed">✅ Confirmed</option>
+        <option value="partial">🔷 Partial</option>
+        <option value="pending">⏳ Pending</option>
+      </select>
+      <button class="btn btn-primary" onclick="addPickN('pick5',5)">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ PICK 6 ════════ -->
+<div id="panel-pick6" class="game-panel">
+  <div class="draw-tabs">
+    <div class="draw-tab active" onclick="setDraw('pick6','midday',this)">☀️ Midday</div>
+    <div class="draw-tab"       onclick="setDraw('pick6','evening',this)">🌆 Evening</div>
+  </div>
+  <!-- Part 1 — Live Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
+    <div id="p6-filter-bar"></div>
+    <table class="sb-table">
+      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Status</th><th></th></tr></thead>
+      <tbody id="p6-tbody"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 Part 2 — Digit Frequency</div>
+        <div id="p6-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
+      </div>
+      <div class="card mb14">
+        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
+        <div id="p6-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
+      </div>
+      <div class="card">
+        <div class="section-title">🔍 Part 4 — Positional Bias Detection</div>
+        <div id="p6-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">📸 Part 6 — Summary Snapshot</div>
+        <div id="p6-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="p6-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="p6-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="p6-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="p6-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="p6-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="p6-s-hot">—</div><div class="sb-key">🔥 Hottest</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="p6-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="p6-s-pick">—</div><div class="sb-key">🎯 Top Pick</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Result</div>
+    <div class="input-row">
+      <input type="text" id="p6-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="p6-n1" placeholder="P1" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n2')"/>
+      <input type="text" id="p6-n2" placeholder="P2" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n3')"/>
+      <input type="text" id="p6-n3" placeholder="P3" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n4')"/>
+      <input type="text" id="p6-n4" placeholder="P4" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n5')"/>
+      <input type="text" id="p6-n5" placeholder="P5" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n6')"/>
+      <input type="text" id="p6-n6" placeholder="P6" maxlength="2" style="width:52px"/>
+      <select id="p6-status" style="width:125px">
+        <option value="confirmed">✅ Confirmed</option>
+        <option value="partial">🔷 Partial</option>
+        <option value="pending">⏳ Pending</option>
+      </select>
+      <button class="btn btn-primary" onclick="addPickN('pick6',6)">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ CASH 3 ════════ -->
+<div id="panel-cash3" class="game-panel">
+  <div class="draw-tabs">
+    <div class="draw-tab active" onclick="setDraw('cash3','midday',this)">☀️ Midday</div>
+    <div class="draw-tab"       onclick="setDraw('cash3','evening',this)">🌆 Evening</div>
+    <div class="draw-tab"       onclick="setDraw('cash3','night',this)">🌙 Night</div>
+  </div>
+  <!-- Part 1 — Live Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
+    <div id="c3-filter-bar"></div>
+    <table class="sb-table">
+      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>Status</th><th></th></tr></thead>
+      <tbody id="c3-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 Part 2 — Frequency</div>
+        <div id="c3-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
+      </div>
+      <div class="card mb14">
+        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
+        <div id="c3-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
+      </div>
+      <div class="card">
+        <div class="section-title">🔍 Part 4 — Bias Detection</div>
+        <div id="c3-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">📸 Part 6 — Summary Snapshot</div>
+        <div id="c3-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="c3-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="c3-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="c3-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="c3-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="c3-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="c3-s-hot">—</div><div class="sb-key">🔥 Hot</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="c3-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="c3-s-pick">—</div><div class="sb-key">🎯 Pick</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Cash 3 Result</div>
+    <div class="input-row">
+      <input type="text" id="c3-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="c3-n1" placeholder="P1" maxlength="1" style="width:54px" oninput="autoTab(this,'c3-n2')"/>
+      <input type="text" id="c3-n2" placeholder="P2" maxlength="1" style="width:54px" oninput="autoTab(this,'c3-n3')"/>
+      <input type="text" id="c3-n3" placeholder="P3" maxlength="1" style="width:54px"/>
+      <select id="c3-status" style="width:125px">
+        <option value="confirmed">✅ Confirmed</option>
+        <option value="partial">🔷 Partial</option>
+        <option value="pending">⏳ Pending</option>
+      </select>
+      <button class="btn btn-primary" onclick="addGeneric3('cash3')">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ DAILY 3 ════════ -->
+<div id="panel-daily3" class="game-panel">
+  <div class="draw-tabs">
+    <div class="draw-tab active" onclick="setDraw('daily3','midday',this)">☀️ Midday</div>
+    <div class="draw-tab"       onclick="setDraw('daily3','evening',this)">🌆 Evening</div>
+  </div>
+  <!-- Part 1 — Live Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
+    <div id="d3-filter-bar"></div>
+    <table class="sb-table">
+      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>Status</th><th></th></tr></thead>
+      <tbody id="d3-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
+    </table>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 Part 2 — Frequency</div>
+        <div id="d3-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
+      </div>
+      <div class="card mb14">
+        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
+        <div id="d3-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
+      </div>
+      <div class="card">
+        <div class="section-title">🔍 Part 4 — Bias Detection</div>
+        <div id="d3-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">📸 Part 6 — Summary Snapshot</div>
+        <div id="d3-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="d3-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="d3-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="d3-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="d3-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="d3-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="d3-s-hot">—</div><div class="sb-key">🔥 Hot</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="d3-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="d3-s-pick">—</div><div class="sb-key">🎯 Pick</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Daily 3 Result</div>
+    <div class="input-row">
+      <input type="text" id="d3-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="d3-n1" placeholder="P1" maxlength="1" style="width:54px" oninput="autoTab(this,'d3-n2')"/>
+      <input type="text" id="d3-n2" placeholder="P2" maxlength="1" style="width:54px" oninput="autoTab(this,'d3-n3')"/>
+      <input type="text" id="d3-n3" placeholder="P3" maxlength="1" style="width:54px"/>
+      <select id="d3-status" style="width:125px">
+        <option value="confirmed">✅ Confirmed</option>
+        <option value="partial">🔷 Partial</option>
+        <option value="pending">⏳ Pending</option>
+      </select>
+      <button class="btn btn-primary" onclick="addGeneric3('daily3')">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ POWERBALL ════════ -->
+<div id="panel-powerball" class="game-panel">
+  <!-- Part 1 — Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Scoreboard</div>
+    <div id="pb-scoreboard"><div class="text-muted" style="padding:8px">No draws yet.</div></div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 White Ball Frequency (1–69)</div>
+        <div id="pb-freq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">🔴 Powerball Frequency (1–26)</div>
+        <div id="pb-pbfreq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="pb-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="pb-s-draws">0</div><div class="sb-key">Draws Tracked</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="pb-s-hot">—</div><div class="sb-key">🔥 Hot WB</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="pb-s-hotpb">—</div><div class="sb-key">🔴 Hot PB</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="pb-s-absent">0</div><div class="sb-key">WB Not Drawn</div></div>
+    <div class="sb-item"><div class="sb-val text-blue"  id="pb-s-avgpp">—</div><div class="sb-key">⚡ Avg PP×</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Powerball Draw</div>
+    <div class="input-row">
+      <input type="text" id="pb-date" placeholder="Date MM/DD" style="width:90px"/>
+      <input type="number" id="pb-n1" placeholder="W1" min="1" max="69" style="width:60px"/>
+      <input type="number" id="pb-n2" placeholder="W2" min="1" max="69" style="width:60px"/>
+      <input type="number" id="pb-n3" placeholder="W3" min="1" max="69" style="width:60px"/>
+      <input type="number" id="pb-n4" placeholder="W4" min="1" max="69" style="width:60px"/>
+      <input type="number" id="pb-n5" placeholder="W5" min="1" max="69" style="width:60px"/>
+      <input type="number" id="pb-pb" placeholder="PB" min="1" max="26" style="width:60px"/>
+      <input type="number" id="pb-pp" placeholder="PP×" min="1" max="10" style="width:56px"/>
+      <button class="btn btn-primary" onclick="addPowerball()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ MEGA MILLIONS ════════ -->
+<div id="panel-megamillions" class="game-panel">
+  <!-- Part 1 — Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Scoreboard</div>
+    <div id="mm-scoreboard"><div class="text-muted" style="padding:8px">No draws yet.</div></div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 White Ball Frequency (1–70)</div>
+        <div id="mm-freq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">💛 Mega Ball Frequency (1–25)</div>
+        <div id="mm-mbfreq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="mm-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="mm-s-draws">0</div><div class="sb-key">Draws Tracked</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="mm-s-hot">—</div><div class="sb-key">🔥 Hot WB</div></div>
+    <div class="sb-item"><div class="sb-val" style="color:#f59e0b" id="mm-s-hotmb">—</div><div class="sb-key">💛 Hot MB</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="mm-s-absent">0</div><div class="sb-key">WB Not Drawn</div></div>
+    <div class="sb-item"><div class="sb-val text-blue"  id="mm-s-hotmp">—</div><div class="sb-key">⚡ Avg MP×</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add Mega Millions Draw</div>
+    <div class="input-row">
+      <input type="text" id="mm-date" placeholder="Date MM/DD" style="width:90px"/>
+      <input type="number" id="mm-n1" placeholder="W1" min="1" max="70" style="width:60px"/>
+      <input type="number" id="mm-n2" placeholder="W2" min="1" max="70" style="width:60px"/>
+      <input type="number" id="mm-n3" placeholder="W3" min="1" max="70" style="width:60px"/>
+      <input type="number" id="mm-n4" placeholder="W4" min="1" max="70" style="width:60px"/>
+      <input type="number" id="mm-n5" placeholder="W5" min="1" max="70" style="width:60px"/>
+      <input type="number" id="mm-mb" placeholder="MB" min="1" max="25" style="width:60px"/>
+      <input type="number" id="mm-mp" placeholder="MP×" min="2" max="5" style="width:56px"/>
+      <button class="btn btn-primary" onclick="addMega()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ LUCKY 5 ════════ -->
+<div id="panel-lucky5" class="game-panel">
+  <!-- Part 1 — Scoreboard (top position, full width) -->
+  <div class="card mb14">
+    <div class="section-title">📋 Part 1 — Scoreboard</div>
+    <div id="l5-scoreboard"><div class="text-muted" style="padding:8px">No draws yet.</div></div>
+  </div>
+  <div class="grid-2">
+    <div>
+      <div class="card mb14">
+        <div class="section-title">📊 Ball Frequency (1–50)</div>
+        <div id="l5-freq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="section-title">⭐ Bonus Ball Frequency (1–27)</div>
+        <div id="l5-megafreq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
+      </div>
+    </div>
+  </div>
+  <div id="l5-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="l5-s-draws">0</div><div class="sb-key">Draws</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="l5-s-hot">—</div><div class="sb-key">🔥 Hot Ball</div></div>
+    <div class="sb-item"><div class="sb-val text-accent2" id="l5-s-hotmega">—</div><div class="sb-key">🔥 Hot Bonus</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="l5-s-absent">0</div><div class="sb-key">Balls Not Drawn</div></div>
+    <div class="sb-item"><div class="sb-val" id="l5-s-clock" style="font-size:.78rem;font-variant-numeric:tabular-nums">—</div><div class="sb-key">🕐 Live Time</div></div>
+  </div>
+  <div class="card mb14 add-result-card">
+    <div class="section-title">➕ Add 5-Ball + Bonus Result</div>
+    <div class="input-row">
+      <input type="text"   id="l5-state" placeholder="State" maxlength="4" style="width:58px;text-transform:uppercase" title="State abbreviation e.g. CA, VA, ME"/>
+      <input type="number" id="l5-n1" placeholder="B1" min="1" max="50" style="width:55px" title="Ball 1–50"/>
+      <input type="number" id="l5-n2" placeholder="B2" min="1" max="50" style="width:55px" title="Ball 1–50"/>
+      <input type="number" id="l5-n3" placeholder="B3" min="1" max="50" style="width:55px" title="Ball 1–50"/>
+      <input type="number" id="l5-n4" placeholder="B4" min="1" max="50" style="width:55px" title="Ball 1–50"/>
+      <input type="number" id="l5-n5" placeholder="B5" min="1" max="50" style="width:55px" title="Ball 1–50"/>
+      <input type="number" id="l5-mega" placeholder="Bonus" min="1" max="27" style="width:65px;border-color:var(--accent2)" title="Bonus ball 1–27"/>
+      <button class="btn btn-primary" onclick="addLucky5()">Add</button>
+    </div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:4px">5 balls 1–50 &nbsp;|&nbsp; Bonus ball 1–27 &nbsp;&bull;&nbsp; e.g. CA SuperLotto (1–47 / 1–27), VA Lotto, ME Megabucks&hellip;</div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<div class="print-footer" id="print-footer"></div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  APP STATE
+// ════════════════════════════════════════════════════════════
+const APP = {
+  currentGame: 'pick3',
+  pick3:        { draw:'midday',  entries:[], statusFilter:'all' },
+  pick4:        { draw:'midday',  entries:[], statusFilter:'all' },
+  pick5:        { draw:'midday',  entries:[], statusFilter:'all' },
+  pick6:        { draw:'midday',  entries:[], statusFilter:'all' },
+  cash3:        { draw:'midday',  entries:[], statusFilter:'all' },
+  daily3:       { draw:'midday',  entries:[], statusFilter:'all' },
+  powerball:    { entries:[] },
+  megamillions: { entries:[] },
+  lucky5:       { entries:[] },
+  date: '' // set after todayET() is defined below
+};
+
+
+// ════════════════════════════════════════════════════════════
+//  CLOCK
+// ════════════════════════════════════════════════════════════
+// Track last-data-update timestamp (set when preload runs or user adds entry)
+let _lastDataUpdate = new Date();
+function markDataUpdated(){ _lastDataUpdate = new Date(); saveState(); }
+
+// ============================================================
+//  TODAY-ONLY PERSISTENCE & MIDNIGHT RESET
+// ============================================================
+const STORAGE_KEY = 'lotto_scoreboard_v25' // v25: parallel fetch (5x concurrency), pos[0] crash fix, Mega Ball max 25, 30-day jackpot lookback, 90s safety, 30 jackpot rows, mobile responsive
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getETDateParts(date?)  →  { year, month, day, hour, minute, second, dayOfWeek }
+// TIMEZONE: America/New_York (handles EDT = UTC-4 in summer, EST = UTC-5 in winter)
+// This is the SINGLE authoritative source of Eastern Time in the entire app.
+// All date/time calculations MUST use this function — never compute DST manually.
+// ─────────────────────────────────────────────────────────────────────────────
+function getETDateParts(date){
+  const d = date || new Date();
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year:    'numeric',
+    month:   '2-digit',
+    day:     '2-digit',
+    hour:    '2-digit',
+    minute:  '2-digit',
+    second:  '2-digit',
+    hour12:  false,
+    weekday: 'short'
+  });
+  const parts = {};
+  fmt.formatToParts(d).forEach(function(p){ parts[p.type] = p.value; });
+  return {
+    year:      parseInt(parts.year),
+    month:     parseInt(parts.month),
+    day:       parseInt(parts.day),
+    hour:      parseInt(parts.hour) % 24, // Intl returns '24' at midnight — normalise to 0
+    minute:    parseInt(parts.minute),
+    second:    parseInt(parts.second),
+    dayOfWeek: parts.weekday // 'Sun','Mon','Tue','Wed','Thu','Fri','Sat'
+  };
+}
+
+/**
+ * Returns today's date as MM/DD/YYYY in Eastern Time (America/New_York).
+ * Before 8 AM ET the lottery is still on the "previous night" schedule,
+ * so we roll the date back one day to keep the scoreboard on the right date.
+ * Uses getETDateParts() — no manual DST arithmetic.
+ */
+function todayET(){
+  var p = getETDateParts();
+  if(p.hour < 8){
+    // before 8 AM ET → report yesterday's lottery date
+    // Use noon UTC (12:00) on the ET calendar date as anchor to avoid UTC offset
+    // pushing us into the wrong day when we subtract 24 h.
+    var anchor = new Date(Date.UTC(p.year, p.month-1, p.day, 12, 0, 0));
+    var yesterday = new Date(anchor.getTime() - 86400000);
+    var pp = getETDateParts(yesterday);
+    return ('0'+pp.month).slice(-2)+'/'+('0'+pp.day).slice(-2)+'/'+pp.year;
+  }
+  return ('0'+p.month).slice(-2)+'/'+('0'+p.day).slice(-2)+'/'+p.year;
+}
+
+// Now that todayET() is defined, set APP.date correctly (with rollback)
+APP.date = todayET();
+
+/** Save full APP state to localStorage (debounced 400ms) */
+function saveState(){
+  clearTimeout(saveState._t);
+  saveState._t = setTimeout(function(){
+    try {
+      var snap = {
+        savedDate: todayET(),
+        pick3:  {draw:APP.pick3.draw,  entries:APP.pick3.entries,  statusFilter:APP.pick3.statusFilter},
+        pick4:  {draw:APP.pick4.draw,  entries:APP.pick4.entries,  statusFilter:APP.pick4.statusFilter},
+        pick5:  {draw:APP.pick5.draw,  entries:APP.pick5.entries,  statusFilter:APP.pick5.statusFilter},
+        pick6:  {draw:APP.pick6.draw,  entries:APP.pick6.entries,  statusFilter:APP.pick6.statusFilter},
+        cash3:  {draw:APP.cash3.draw,  entries:APP.cash3.entries,  statusFilter:APP.cash3.statusFilter},
+        daily3: {draw:APP.daily3.draw, entries:APP.daily3.entries, statusFilter:APP.daily3.statusFilter},
+        powerball:    {entries:APP.powerball.entries},
+        megamillions: {entries:APP.megamillions.entries},
+        lucky5:       {entries:APP.lucky5.entries}
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
+    } catch(e){}
+  }, 400);
+}
+
+/** Load today's saved state; returns true if valid today-data was found */
+function loadState(){
+  try {
+    var raw2 = localStorage.getItem(STORAGE_KEY);
+    if(!raw2) return false;
+    var snap = JSON.parse(raw2);
+    if(snap.savedDate !== todayET()){ localStorage.removeItem(STORAGE_KEY); return false; }
+    ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){
+      if(snap[g]){
+        APP[g].entries      = snap[g].entries      || [];
+        APP[g].draw         = snap[g].draw         || 'midday';
+        APP[g].statusFilter = snap[g].statusFilter || 'all';
+      }
+    });
+    ['powerball','megamillions','lucky5'].forEach(function(g){
+      if(snap[g]) APP[g].entries = snap[g].entries || [];
+    });
+    APP.date = snap.savedDate;
+    return true;
+  } catch(e){ return false; }
+}
+
+/** Wipe everything and start fresh for a new day */
+function resetForNewDay(){
+  localStorage.removeItem(STORAGE_KEY);
+  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){
+    APP[g].entries=[]; APP[g].statusFilter='all'; APP[g].draw='midday';
+  });
+  ['powerball','megamillions','lucky5'].forEach(function(g){ APP[g].entries=[]; });
+  APP.date = todayET();
+  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){ renderGame(g); });
+  ['powerball','megamillions','lucky5'].forEach(function(g){ renderJackpot(g); });
+  showToast('🗓 New day! Scoreboard reset for ' + APP.date + ' — fetching live results…', 'info', 5000);
+  // Auto-fetch live results for the new day
+  setTimeout(function(){ fetchLiveAndRender(); }, 500);
+}
+
+/** Toast notification helper */
+function showToast(msg, type, ms){
+  ms = ms || 3000;
+  var t = document.getElementById('sb-toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'sb-toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);'+
+      'background:#1e293b;border:1px solid #334155;color:#e2e8f0;'+
+      'padding:9px 18px;border-radius:10px;font-size:.82rem;z-index:9999;'+
+      'box-shadow:0 4px 20px rgba(0,0,0,.5);transition:opacity .4s;max-width:90vw;text-align:center';
+    document.body.appendChild(t);
+  }
+  t.style.borderColor = (type==='warn') ? '#f59e0b' : '#38bdf8';
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._h);
+  t._h = setTimeout(function(){ t.style.opacity='0'; }, ms);
+}
+
+/** Check every 30 s for midnight rollover in ET */
+var _watchedDate = todayET();
+setInterval(function(){
+  var now = todayET();
+  if(now !== _watchedDate){ _watchedDate = now; resetForNewDay(); }
+}, 30000);
+
+
+function updateClock(){
+  const now = new Date();
+  // Time-only in the slim header clock
+  const clockEl = document.getElementById('clock');
+  if(clockEl) clockEl.textContent =
+    now.toLocaleTimeString('en-US',{timeZone:'America/New_York',
+      hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ET';
+  // Date chip: use lottery-day date (todayET rolls back before 8 AM ET)
+  const lbl = document.getElementById('today-label');
+  if(lbl){
+    // Format the lottery-day date as "Sun, Mar 22" to match todayET()
+    const lotteryDay = todayET(); // e.g. "03/22/2026"
+    const [lm, ld, ly] = lotteryDay.split('/');
+    const lotteryDate = new Date(parseInt(ly), parseInt(lm)-1, parseInt(ld), 12, 0, 0);
+    lbl.textContent = lotteryDate.toLocaleDateString('en-US',{weekday:'short', month:'short', day:'numeric'});
+  }
+  // 5+Bonus live tile — always update when element exists
+  const l5c = document.getElementById('l5-s-clock');
+  if(l5c){
+    l5c.textContent = now.toLocaleString('en-US',{
+      timeZone:'America/New_York',
+      month:'2-digit',day:'2-digit',year:'numeric',
+      hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ET';
+  }
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ════════════════════════════════════════════════════════════
+function switchGame(game, btn){
+  document.querySelectorAll('.game-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+game).classList.add('active');
+  btn.classList.add('active');
+  APP.currentGame = game;
+  // Sync APP draw state with whichever draw-tab is visually active in this panel
+  const panel = document.getElementById('panel-'+game);
+  if(panel){
+    const activeDrawTab = panel.querySelector('.draw-tab.active');
+    if(activeDrawTab){
+      const m = activeDrawTab.getAttribute('onclick').match(/setDraw\('[^']+','([^']+)'/);
+      if(m) APP[game].draw = m[1];
+    }
+  }
+  // Re-render on every tab switch so data is always fresh
+  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  if(pickGames.includes(game)) renderGame(game);
+  else renderJackpot(game);
+}
+
+function setDraw(game, draw, el){
+  APP[game].draw = draw;
+  el.closest('.draw-tabs').querySelectorAll('.draw-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderGame(game);
+}
+
+function setDate(val){
+  APP.date = val || new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+}
+
+// Set status view-filter for a game
+function setStatusFilter(game, filter){
+  APP[game].statusFilter = filter;
+  renderGame(game);
+}
+
+// Inline confirm: upgrade a pending/partial row to confirmed
+function confirmEntry(game, idx){
+  const e = APP[game].entries[idx];
+  if(!e) return;
+  // prompt for any missing digits/numbers
+  const n = e.nums.length;
+  const numOk = v => (game==='pick5'||game==='pick6') ? isNum49(v) : isDigit(v);
+  const hint  = game==='pick6' ? 'number (1-49)' : game==='pick5' ? 'number (1-39)' : 'digit (0-9)';
+  for(let i=0; i<n; i++){
+    if(!numOk(e.nums[i])){
+      const v = prompt(`Enter ${hint} for P${i+1} (${e.state}):`);
+      if(v !== null && numOk(v.trim())) e.nums[i] = v.trim();
+    }
+  }
+  // only upgrade to confirmed if ALL digits/numbers are now valid
+  const allKnown = e.nums.every(d=>numOk(d));
+  if(allKnown){
+    e.status = 'confirmed';
+  } else {
+    const anyKnown = e.nums.some(d=>numOk(d));
+    e.status = anyKnown ? 'partial' : 'pending';
+  }
+  renderGame(game);
+}
+
+// Inline edit: change any single digit in a row
+// Accepts: full set (1-2-3), partial set using ? for unknowns (4-?-?), or single digit for P1 only
+function editEntry(game, idx){
+  const e = APP[game].entries[idx];
+  if(!e) return;
+  const n = e.nums.length;
+  const current = e.nums.join('-');
+  const input = prompt(
+    `Edit ${e.state} (current: ${current})\n` +
+    `Enter ${n} values separated by dashes.\n` +
+    `Use ? for unknown positions (e.g. 4-?-? or 1-2-3).`
+  );
+  if(!input) return;
+  const parts = input.split('-').map(s=>s.trim());
+  if(parts.length !== n){
+    alert(`Please enter exactly ${n} values separated by dashes (use ? for unknown).`);
+    return;
+  }
+  // validate: each part must be a valid number or '?'
+  // pick5 accepts 1-39, pick6 accepts 1-49; all others accept single digit 0-9
+  const validFn = (game==='pick5'||game==='pick6') ? (p=>isNum49(p)||p==='?') : (p=>isDigit(p)||p==='?');
+  const valid = parts.every(validFn);
+  if(!valid){
+    const hint = game==='pick6' ? '1–49 or ?' : game==='pick5' ? '1–39 or ?' : 'single digit 0-9 or ?';
+    alert(`Each value must be ${hint} for unknown.`);
+    return;
+  }
+  e.nums = parts;
+  // auto-set status based on how many are known
+  const numOkFn2 = (game==='pick5'||game==='pick6') ? isNum49 : isDigit;
+  const knownCount = parts.filter(p=>numOkFn2(p)).length;
+  e.status = knownCount===n ? 'confirmed' : knownCount>0 ? 'partial' : 'pending';
+  renderGame(game);
+}
+
+function clearAll(){
+  if(!confirm('Clear ALL data for all games?')) return;
+  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(g=>{ APP[g].entries=[]; APP[g].statusFilter='all'; renderGame(g); });
+  ['powerball','megamillions','lucky5'].forEach(g=>{ APP[g].entries=[]; renderJackpot(g); });
+  try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+}
+
+// ════════════════════════════════════════════════════════════
+//  LIVE FETCH MAP — maps game+state+draw to backend lottery_ids
+//  Used by the ↺ Update button to pull live results from the API
+// ════════════════════════════════════════════════════════════
+const LIVE_FETCH = {
+  // ─────────────────────────────────────────────────────────────────────────
+  // IDs here MUST match keys in the backend LOTTERY_NET_CA_URL_MAP (scrapers.py)
+  // ─────────────────────────────────────────────────────────────────────────
+  pick3: {
+    midday: [
+      {state:'NY', id:'ny_numbers_midday'},  // NY Numbers Midday
+      {state:'PA', id:'pa_pick3_day'},        // PA Pick 3 Day  (lottery.net /pick-3-day/)
+      {state:'NJ', id:'nj_pick3'},            // NJ Pick 3 (single URL, no midday split)
+      {state:'FL', id:'fl_pick3_midday'},
+      {state:'GA', id:'ga_cash3_midday'},     // GA Cash 3 Midday
+      {state:'OH', id:'oh_pick3_midday'},     // OH Pick 3 Midday
+      {state:'MD', id:'md_pick3_midday'},
+      {state:'VA', id:'va_pick3_day'},        // VA Pick 3 Day
+      {state:'NC', id:'nc_pick3_midday'},     // NC Pick 3 Midday
+      {state:'TN', id:'tn_cash3_midday'},     // TN Cash 3 Midday
+      {state:'MI', id:'mi_daily3_midday'},
+      {state:'IN', id:'in_daily3_midday'},    // IN Daily 3 Midday
+      {state:'IL', id:'il_pick3_midday'},     // IL Pick 3 Midday
+      {state:'CA', id:'ca_midday3'},          // CA Daily 3 Midday
+    ],
+    evening: [
+      {state:'NY', id:'ny_numbers'},
+      {state:'PA', id:'pa_pick3_evening'},    // PA Pick 3 Evening
+      {state:'NJ', id:'nj_pick3'},
+      {state:'FL', id:'fl_pick3'},
+      {state:'GA', id:'ga_cash3'},            // GA Cash 3 Evening
+      {state:'OH', id:'oh_pick3'},
+      {state:'MD', id:'md_pick3'},
+      {state:'VA', id:'va_pick3'},            // VA Pick 3 Night
+      {state:'NC', id:'nc_pick3'},
+      {state:'TN', id:'tn_cash3_evening'},    // TN Cash 3 Evening
+      {state:'MI', id:'mi_daily3'},
+      {state:'IN', id:'in_daily3'},           // IN Daily 3 Evening
+      {state:'IL', id:'il_pick3_evening'},    // IL Pick 3 Evening
+      {state:'CA', id:'ca_daily3'},
+    ]
+  },
+  pick4: {
+    midday: [
+      {state:'NY', id:'ny_win4_midday'},
+      {state:'PA', id:'pa_pick4_day'},        // PA Pick 4 Day
+      {state:'NJ', id:'nj_pick4'},            // NJ Pick 4 (single URL)
+      {state:'FL', id:'fl_pick4_midday'},
+      {state:'GA', id:'ga_cash4_midday'},     // GA Cash 4 Midday
+      {state:'OH', id:'oh_pick4_midday'},     // OH Pick 4 Midday
+      {state:'MD', id:'md_pick4_midday'},
+      {state:'VA', id:'va_pick4_day'},        // VA Pick 4 Day
+      {state:'IL', id:'il_pick4_midday'},     // IL Pick 4 Midday
+      {state:'CA', id:'ca_daily4'},           // CA Daily 4 (single URL)
+    ],
+    evening: [
+      {state:'NY', id:'ny_win4'},
+      {state:'PA', id:'pa_pick4_evening'},    // PA Pick 4 Evening
+      {state:'NJ', id:'nj_pick4'},
+      {state:'FL', id:'fl_pick4'},
+      {state:'GA', id:'ga_cash4'},            // GA Cash 4 Evening
+      {state:'OH', id:'oh_pick4'},
+      {state:'MD', id:'md_pick4'},
+      {state:'VA', id:'va_pick4'},            // VA Pick 4 Night
+      {state:'IL', id:'il_pick4_evening'},    // IL Pick 4 Evening
+      {state:'CA', id:'ca_daily4'},
+    ]
+  },
+  pick5: {
+    midday: [
+      {state:'NY', id:'ny_take5_midday'},
+      {state:'FL', id:'fl_pick5_midday'},
+      {state:'GA', id:'ga_five_midday'},      // GA Five Midday
+      {state:'VA', id:'va_cash5'},            // VA Cash 5 (single draw)
+    ],
+    evening: [
+      {state:'NY', id:'ny_take5'},
+      {state:'FL', id:'fl_pick5'},
+      {state:'GA', id:'ga_five_evening'},     // GA Five Evening (was ga_five – wrong)
+      {state:'OH', id:'oh_rolling_cash5'},    // OH Rolling Cash 5 (was oh_rolling5 – wrong)
+      {state:'VA', id:'va_cash5'},
+      {state:'MI', id:'mi_fantasy5'},
+      {state:'CA', id:'ca_fantasy5'},
+    ]
+  },
+  pick6: {
+    evening: [
+      {state:'NJ', id:'nj_pick6'},
+      {state:'NY', id:'ny_lotto'},
+      {state:'PA', id:'pa_match6'},
+    ]
+  },
+  cash3: {
+    midday:  [{state:'GA', id:'ga_cash3_midday'}, {state:'TN', id:'tn_cash3_midday'}, {state:'FL', id:'fl_pick3_midday'}],
+    evening: [{state:'GA', id:'ga_cash3'},        {state:'TN', id:'tn_cash3_evening'},{state:'FL', id:'fl_pick3'}]
+  },
+  daily3: {
+    midday:  [{state:'MI', id:'mi_daily3_midday'}, {state:'IN', id:'in_daily3_midday'}, {state:'IL', id:'il_pick3_midday'}, {state:'CA', id:'ca_midday3'}],
+    evening: [{state:'MI', id:'mi_daily3'},        {state:'IN', id:'in_daily3'},         {state:'IL', id:'il_pick3_evening'},{state:'CA', id:'ca_daily3'}]
+  },
+  powerball: [
+    {state:'US', id:'powerball'}
+  ],
+  megamillions: [
+    {state:'US', id:'mega_millions'}
+  ],
+  lucky5: [
+    {state:'CA', id:'ca_superlotto_plus'}    // CA SuperLotto Plus (was ca_super_lotto_plus – wrong)
+  ]
+};
+
+// Format today's date as YYYY-MM-DD for the API
+function apiDateStr(daysBack){
+  const p = getETDateParts();
+  const d = new Date(p.year, p.month-1, p.day - (daysBack||0));
+  const m = ('0'+(d.getMonth()+1)).slice(-2);
+  const dd = ('0'+d.getDate()).slice(-2);
+  return d.getFullYear()+'-'+m+'-'+dd;
+}
+
+// Format API date YYYY-MM-DD → M/D/YYYY for entry timestamps
+function apiDateToTs(apiDate){
+  const [y,m,d] = apiDate.split('-');
+  return parseInt(m)+'/'+parseInt(d)+'/'+y;
+}
+
+// ─── Fetch with timeout + 429-retry (exponential backoff) ───────────────────
+async function fetchWithRetry(url, maxRetries){
+  const PER_REQUEST_MS = 5500;   // 5.5 s per attempt — abort if backend hangs
+  for(let attempt=0; attempt <= (maxRetries||2); attempt++){
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), PER_REQUEST_MS);
+    try{
+      const resp = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(tid);
+      if(resp.status === 429){
+        const wait = 1000 * Math.pow(2, attempt);   // 1s, 2s, 4s
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+      return resp;
+    } catch(e){
+      clearTimeout(tid);
+      if(attempt === (maxRetries||2)) return null;   // give up, return null
+      await new Promise(r => setTimeout(r, 500 * (attempt+1)));
+    }
+  }
+  return null;
+}
+
+// ─── Build a reverse-lookup: lotteryId → {game, drawType, state} ─────────────
+function buildIdIndex(){
+  const idx = {};
+  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  for(const game of pickGames){
+    const map = LIVE_FETCH[game];
+    if(!map) continue;
+    for(const drawType of ['midday','evening']){
+      const items = map[drawType];
+      if(!items) continue;
+      for(const item of items){
+        idx[item.id] = { game, drawType, state: item.state };
+      }
+    }
+  }
+  // Jackpot games
+  for(const game of ['powerball','megamillions','lucky5']){
+    const items = LIVE_FETCH[game];
+    if(!items) continue;
+    for(const item of items){
+      idx[item.id] = { game, drawType: 'jackpot', state: item.state };
+    }
+  }
+  return idx;
+}
+
+// ─── Group all lottery IDs by state for batched API calls ────────────────────
+// Returns: Map<stateCode, {ids:[...], fromDate, toDate}>
+function buildStateBatches(fromDate, toDate, jackpotFromDate){
+  const batches = {};  // state → {ids, fromDate}
+
+  function addId(state, id, from){
+    const sc = (state === 'US') ? 'NY' : state;  // US jackpots use NY as state_code
+    if(!batches[sc]) batches[sc] = { ids: [], from: from||fromDate };
+    if(!batches[sc].ids.includes(id)) batches[sc].ids.push(id);
+    // Use the earlier of the two from-dates for this state
+    if(from && from < batches[sc].from) batches[sc].from = from;
+  }
+
+  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  for(const game of pickGames){
+    const map = LIVE_FETCH[game];
+    if(!map) continue;
+    for(const drawType of ['midday','evening']){
+      const items = map[drawType];
+      if(!items) continue;
+      for(const item of items) addId(item.state, item.id, fromDate);
+    }
+  }
+  for(const game of ['powerball','megamillions','lucky5']){
+    const items = LIVE_FETCH[game];
+    if(!items) continue;
+    for(const item of items) addId(item.state, item.id, jackpotFromDate);
+  }
+
+  return batches;
+}
+
+// ─── Main live-fetch and re-render ────────────────────────────────────────────
+// v25: Parallel fetch with concurrency limit — all states fetched simultaneously
+async function fetchLiveAndRender(){
+  const btn = document.querySelector('.btn-update');
+  if(btn){ btn.textContent='⏳ Fetching…'; btn.disabled=true; }
+
+  // Safety net: always re-enable button after 90 s even if something hangs
+  const safetyTimer = setTimeout(() => {
+    if(btn && btn.disabled){
+      btn.disabled = false;
+      btn.textContent='⚠️ Timed out'; setTimeout(()=>{ btn.textContent='↺ Update'; },3000);
+      showToast('⚠️ Update timed out — showing cached data', 'warn', 5000);
+    }
+  }, 90000);
+
+  try {
+    await _doFetchLiveAndRender(btn);
+  } finally {
+    clearTimeout(safetyTimer);
+  }
+}
+
+async function _doFetchLiveAndRender(btn){
+  const toDate          = apiDateStr(0);
+  const fromDate        = apiDateStr(3);    // look back 3 days for pick games
+  const jackpotFromDate = apiDateStr(30);   // look back 30 days for jackpots
+
+  let fetched = 0, errors = 0;
+
+  // Build reverse index: lotteryId → {game, drawType, state}
+  const idIndex = buildIdIndex();
+
+  // Build batches: state → {ids[], from}
+  const batches = buildStateBatches(fromDate, toDate, jackpotFromDate);
+
+  // Collect results by [game][drawType] → latestRow per lottery ID
+  // We keep the most-recent row per lottery ID
+  const latestByLid = {};  // lotteryId → array of rows (for jackpots, multiple rows)
+
+  // v25: Fire ALL state requests in parallel (Promise.all) instead of sequential.
+  // This cuts load time from ~70s to ~8-12s since each request takes ~3-5s.
+  const batchEntries = Object.entries(batches);
+  const CONCURRENCY = 5; // max 5 in-flight at once to respect rate limits
+
+  // Semaphore-based concurrency limiter
+  async function fetchBatch(stateCode, batch){
+    const idsParam = batch.ids.join(',');
+    const url = `/extract?state_code=${stateCode}&lottery_ids=${encodeURIComponent(idsParam)}&from_date=${batch.from}&to_date=${toDate}`;
+    try{
+      const resp = await fetchWithRetry(url, 3);
+      if(!resp || !resp.ok) return { ok:false };
+      const json = await resp.json();
+      return { ok:true, data: json.data || [] };
+    } catch(e){ return { ok:false }; }
+  }
+
+  // Run with concurrency limit
+  async function runWithConcurrency(entries, limit){
+    const results = [];
+    let idx = 0;
+    async function worker(){
+      while(idx < entries.length){
+        const i = idx++;
+        const [sc, batch] = entries[i];
+        results[i] = { stateCode: sc, result: await fetchBatch(sc, batch) };
+      }
+    }
+    const workers = Array.from({length: Math.min(limit, entries.length)}, () => worker());
+    await Promise.all(workers);
+    return results;
+  }
+
+  const allResults = await runWithConcurrency(batchEntries, CONCURRENCY);
+
+  for(const {stateCode, result} of allResults){
+    if(!result.ok){ errors++; continue; }
+    if(!result.data.length) continue;
+    for(const row of result.data){
+      const lid = (row.Lottery_ID || '').toLowerCase().replace(/\s/g,'_');
+      if(!lid) continue;
+      if(!latestByLid[lid]) latestByLid[lid] = [];
+      latestByLid[lid].push(row);
+    }
+  }
+
+  // ── Process pick-style games ───────────────────────────────────────────────
+  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  for(const game of pickGames){
+    const map = LIVE_FETCH[game];
+    if(!map) continue;
+    for(const drawType of ['midday','evening']){
+      const items = map[drawType];
+      if(!items) continue;
+      const newEntries = [];
+      for(const item of items){
+        const rows = latestByLid[item.id];
+        if(!rows || !rows.length) continue;
+        // Sort descending by date; take latest
+        const row = rows.sort((a,b)=> b.Date.localeCompare(a.Date))[0];
+        const nums = [];
+        for(let i=1; i<=9; i++){
+          const v = row['Ball_'+i];
+          if(v===undefined || v===null || v==='') break;
+          nums.push(String(v));
+        }
+        if(!nums.length) continue;
+        const ts = apiDateToTs(row.Date);
+        newEntries.push({ state: item.state, nums, wb:'', status:'confirmed', draw: drawType, ts });
+      }
+      if(newEntries.length){
+        const newTs = newEntries.map(e=>e.ts);
+        // Remove stale entries for same draw that share a fetched date
+        APP[game].entries = APP[game].entries.filter(e =>
+          !(e.draw===drawType && e.ts && e.ts.indexOf('/')!==-1 && newTs.includes(e.ts))
+        );
+        newEntries.forEach(e => APP[game].entries.push(e));
+        fetched += newEntries.length;
+      }
+    }
+    renderGame(game);
+  }
+
+  // ── Process jackpot games ─────────────────────────────────────────────────
+  for(const game of ['powerball','megamillions','lucky5']){
+    const items = LIVE_FETCH[game];
+    if(!items) continue;
+    const newEntries = [];
+    for(const item of items){
+      const rows = latestByLid[item.id];
+      if(!rows || !rows.length) continue;
+      for(const row of rows.slice(0, 30)){
+        const nums = [];
+        for(let i=1; i<=9; i++){
+          const v = row['Ball_'+i];
+          if(v===undefined || v===null || v==='') break;
+          nums.push(parseInt(v));
+        }
+        if(!nums.length) continue;
+        const dateStr = apiDateToTs(row.Date);
+        if(game==='powerball'){
+          const pb = parseInt(row.Powerball || row.Ball_6 || 0);
+          newEntries.push({date:dateStr, nums, pb, pp:1, ts:''});
+        } else if(game==='megamillions'){
+          const mb = parseInt(row.Mega_Ball || row.Mega || row.Ball_6 || 0);
+          newEntries.push({date:dateStr, nums, mb, mp:1, ts:''});
+        } else if(game==='lucky5'){
+          const mega = parseInt(row.Mega || row.Bonus_Ball || row.Ball_6 || 0);
+          newEntries.push({state:'CA', date:dateStr, time:'7:57 PM', nums, mega, ts:'7:57 PM'});
+        }
+      }
+    }
+    if(newEntries.length){
+      const existingDates = new Set(APP[game].entries.map(e=>e.date));
+      newEntries.filter(e=>!existingDates.has(e.date)).forEach(e=>APP[game].entries.push(e));
+      APP[game].entries.sort((a,b)=> new Date(b.date)-new Date(a.date));
+      fetched += newEntries.length;
+    }
+    renderJackpot(game);
+  }
+
+  saveState();
+
+  if(btn){
+    btn.disabled = false;
+    if(fetched > 0){
+      btn.textContent='✅ '+fetched+' loaded';
+      setTimeout(()=>{ btn.textContent='↺ Update'; },3000);
+      showToast('✅ Live data updated: '+fetched+' results', 'success', 3000);
+    } else if(errors > 0){
+      btn.textContent='⚠️ Retry'; setTimeout(()=>{ btn.textContent='↺ Update'; },3000);
+      showToast('⚠️ Network error — showing cached data. Try again.', 'warn', 5000);
+    } else {
+      // API reachable but returned 0 records — data source may be temporarily unavailable
+      ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(g=>renderGame(g));
+      ['powerball','megamillions','lucky5'].forEach(g=>renderJackpot(g));
+      btn.textContent='⚠️ No new data'; setTimeout(()=>{ btn.textContent='↺ Update'; },4000);
+      showToast('⚠️ Live source unavailable — showing most recent cached data ('+todayET()+')', 'warn', 5000);
+    }
+  }
+}
+
+// Update / refresh all visible game analyses
+function refreshAll(){
+  fetchLiveAndRender();
+}
+
+// ════════════════════════════════════════════════════════════
+//  PRINT SCOREBOARD
+// ════════════════════════════════════════════════════════════
+function printScoreboard(){
+  // Determine the active game label and draw
+  const gameLabels = {
+    pick3:'Pick 3', pick4:'Pick 4', pick5:'Pick 5', pick6:'Pick 6',
+    cash3:'Cash 3', daily3:'Daily 3', powerball:'Powerball',
+    megamillions:'Mega Millions', lucky5:'5-Ball + Bonus'
+  };
+  const gameEmojis = {
+    pick3:'🎯', pick4:'🎲', pick5:'🎳', pick6:'🎰',
+    cash3:'💵', daily3:'📅', powerball:'🔴',
+    megamillions:'💛', lucky5:'⭐'
+  };
+  const game = APP.currentGame;
+  const label = gameLabels[game] || game;
+  const emoji = gameEmojis[game] || '🎰';
+
+  // Draw type for pick games
+  let drawLabel = '';
+  if(APP[game] && APP[game].draw){
+    const d = APP[game].draw;
+    drawLabel = ' \u2014 ' + d.charAt(0).toUpperCase() + d.slice(1);
+  }
+
+  // Entry count
+  const entries = APP[game] ? (APP[game].entries || []) : [];
+  const total = entries.length;
+  const confirmed = entries.filter(e => e.status === 'confirmed').length;
+  const pending = entries.filter(e => e.status === 'pending').length;
+  const partial = entries.filter(e => e.status === 'partial').length;
+
+  // Build subtitle parts
+  const parts = [];
+  parts.push(todayET());
+  if(total > 0){
+    let counts = confirmed + ' confirmed';
+    if(partial > 0) counts += ', ' + partial + ' partial';
+    if(pending > 0) counts += ', ' + pending + ' pending';
+    parts.push(counts + ' (' + total + ' total)');
+  } else {
+    parts.push('No results');
+  }
+  const printTime = new Date().toLocaleString('en-US', {timeZone:'America/New_York', hour:'numeric', minute:'2-digit', hour12:true});
+  parts.push('Printed ' + printTime + ' ET');
+
+  // Set print header content
+  const titleEl = document.getElementById('print-title');
+  const subEl   = document.getElementById('print-sub');
+  if(titleEl) titleEl.textContent = emoji + ' ' + label + drawLabel + ' Scoreboard';
+  if(subEl)   subEl.textContent   = parts.join('  |  ');
+
+  // Set print footer
+  const footerEl = document.getElementById('print-footer');
+  if(footerEl) footerEl.textContent = 'Lotto Scoreboard \u2022 ' + window.location.href;
+
+  window.print();
+}
+
+
+function autoTab(el, nextId){
+  if(el.value.length >= 1){ const n=document.getElementById(nextId); if(n) n.focus(); }
+}
+// autoTab for two-digit inputs (Pick 5 / Fantasy 5 — numbers 1-39)
+function autoTab2(el, nextId){
+  if(el.value.length >= 2){ const n=document.getElementById(nextId); if(n) n.focus(); }
+}
+function isDigit(v){ return /^[0-9]$/.test(String(v)); }
+// isNum: accepts single digits 0-9 OR two-digit numbers 1-39 (Fantasy 5 / Pick 5)
+function isNum(v){ return /^([0-9]|[1-3][0-9]|0[1-9])$/.test(String(v).trim()); }
+// isNum49: accepts 1-49 (covers Pick 6 lotteries: NJ Pick-6, NY Lotto, PA Match 6 etc.)
+function isNum49(v){
+  const n = parseInt(String(v).trim(), 10);
+  return !isNaN(n) && n >= 1 && n <= 49 && /^[0-9]{1,2}$/.test(String(v).trim());
+}
+// isNum50: accepts 1-50 (5+Bonus main balls)
+function isNum50(v){
+  const n = parseInt(String(v).trim(), 10);
+  return !isNaN(n) && n >= 1 && n <= 50 && /^[0-9]{1,2}$/.test(String(v).trim());
+}
+// isNum27: accepts 1-27 (5+Bonus bonus ball)
+function isNum27(v){
+  const n = parseInt(String(v).trim(), 10);
+  return !isNaN(n) && n >= 1 && n <= 27 && /^[0-9]{1,2}$/.test(String(v).trim());
+}
+
+const POS_COLORS = ['var(--p1)','var(--p2)','var(--p3)','var(--p4)','var(--p5)'];
+const POS_CLS    = ['ball-p1','ball-p2','ball-p3','ball-p4','ball-p5'];
+
+function ballHtml(d, posIdx){
+  const cls    = d==='?' ? 'ball-unknown' : (POS_CLS[posIdx] || 'ball-p1');
+  // any two-digit number (10-99) gets a wider pill shape so digits don't overflow the circle
+  const twoDig = /^[1-9][0-9]$/.test(String(d)) ? ' ball-2d' : '';
+  return `<span class="ball ${cls}${twoDig}">${d}</span>`;
+}
+// same logic for the big jackpot-style balls (Powerball, Mega, Lucky5)
+function bigBallHtml(n, cls){
+  const twoDig = /^[1-9][0-9]$/.test(String(n)) ? ' ball-2d' : '';
+  return `<span class="big-ball ${cls}${twoDig}">${n}</span>`;
+}
+
+function now2(){ return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}); }
+
+// ════════════════════════════════════════════════════════════
+//  ADD — PICK 3
+// ════════════════════════════════════════════════════════════
+function addPick3(){
+  const st     = document.getElementById('p3-state').value.trim().toUpperCase();
+  const n1     = document.getElementById('p3-n1').value.trim();
+  const n2     = document.getElementById('p3-n2').value.trim();
+  const n3     = document.getElementById('p3-n3').value.trim();
+  const wb     = document.getElementById('p3-wb').value.trim();
+  const status = document.getElementById('p3-status').value;
+  const err    = document.getElementById('p3-error');
+
+  if(!st){ err.textContent='State required'; return; }
+  if(status==='confirmed' && (!isDigit(n1)||!isDigit(n2)||!isDigit(n3))){
+    err.textContent='All 3 digits required for Confirmed status'; return;
+  }
+  if(status==='partial' && !isDigit(n1) && !isDigit(n2) && !isDigit(n3)){
+    err.textContent='Partial requires at least 1 known digit — use ⏳ Pending for fully unknown draws'; return;
+  }
+  err.textContent='';
+
+  // auto-determine status: if all 3 entered but user left as partial → upgrade to confirmed
+  let finalStatus = status;
+  const nums = [n1||'?', n2||'?', n3||'?'];
+  if(status==='partial' && nums.every(d=>isDigit(d))) finalStatus='confirmed';
+
+  APP.pick3.entries.push({
+    state:st, nums,
+    wb, status:finalStatus, draw:APP.pick3.draw, ts:now2()
+  });
+  ['p3-state','p3-n1','p3-n2','p3-n3','p3-wb'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('p3-state').focus();
+  markDataUpdated();
+  renderGame('pick3');
+}
+
+function addPendingPick3(){
+  const st = prompt('Enter state abbreviation for pending draw:');
+  if(!st) return;
+  APP.pick3.entries.push({
+    state:st.trim().toUpperCase(), nums:['?','?','?'],
+    wb:'', status:'pending', draw:APP.pick3.draw, ts:now2()
+  });
+  markDataUpdated();
+  renderGame('pick3');
+}
+
+// ════════════════════════════════════════════════════════════
+//  ADD — PICK 4 / PICK 5 (fixed — no template literal bug)
+// ════════════════════════════════════════════════════════════
+function addPickN(game, n){
+  const prefix  = game==='pick4' ? 'p4' : game==='pick5' ? 'p5' : 'p6';
+  const stEl    = document.getElementById(prefix+'-state');
+  const st      = stEl.value.trim().toUpperCase();
+  if(!st) return;
+
+  const nums = [];
+  for(let i=1; i<=n; i++){
+    const v = document.getElementById(prefix+'-n'+i).value.trim();
+    nums.push(v||'?');
+  }
+  const wbEl = document.getElementById(prefix+'-wb');
+  const wb   = wbEl ? wbEl.value.trim() : '';
+  const status = document.getElementById(prefix+'-status').value;
+
+  // pick5 (1-39) and pick6 (1-49) use multi-digit numbers; pick3/4 use single digits 0-9
+  const isNumGameAdd = (game==='pick5' || game==='pick6');
+  const numOkFn = isNumGameAdd ? isNum49 : isDigit;
+  const knownCount = nums.filter(d=>numOkFn(d)).length;
+
+  // validation
+  if(status==='confirmed' && knownCount < n){
+    const label = game==='pick6' ? 'numbers (1–49)' : game==='pick5' ? 'numbers (1–39)' : 'digits';
+    alert(`All ${n} ${label} required for Confirmed status.`); return;
+  }
+  if(status==='partial' && knownCount === 0){
+    alert('Partial requires at least 1 known value. Use ⏳ Pending for fully unknown draws.'); return;
+  }
+
+  // auto-upgrade partial→confirmed if all values are actually filled
+  let finalStatus = status;
+  if(status==='partial' && knownCount === n) finalStatus='confirmed';
+
+  APP[game].entries.push({ state:st, nums, wb, status:finalStatus, draw:APP[game].draw, ts:now2() });
+
+  stEl.value = '';
+  for(let i=1; i<=n; i++) document.getElementById(prefix+'-n'+i).value='';
+  if(wbEl) wbEl.value='';
+  renderGame(game);
+}
+
+// ════════════════════════════════════════════════════════════
+//  ADD — CASH 3 / DAILY 3
+// ════════════════════════════════════════════════════════════
+function addGeneric3(game){
+  const prefix = game==='cash3' ? 'c3' : 'd3';
+  const st  = document.getElementById(prefix+'-state').value.trim().toUpperCase();
+  const n1  = document.getElementById(prefix+'-n1').value.trim();
+  const n2  = document.getElementById(prefix+'-n2').value.trim();
+  const n3  = document.getElementById(prefix+'-n3').value.trim();
+  const status = document.getElementById(prefix+'-status').value;
+  if(!st) return;
+
+  const nums = [n1||'?', n2||'?', n3||'?'];
+  const knownCount = nums.filter(d=>isDigit(d)).length;
+
+  if(status==='confirmed' && knownCount < 3){
+    alert('All 3 digits required for Confirmed status.'); return;
+  }
+  if(status==='partial' && knownCount === 0){
+    alert('Partial requires at least 1 known digit. Use ⏳ Pending for fully unknown draws.'); return;
+  }
+
+  // auto-upgrade partial→confirmed if all digits filled
+  let finalStatus = status;
+  if(status==='partial' && knownCount === 3) finalStatus='confirmed';
+
+  APP[game].entries.push({ state:st, nums,
+    wb:'', status:finalStatus, draw:APP[game].draw, ts:now2() });
+  ['state','n1','n2','n3'].forEach(f=>document.getElementById(prefix+'-'+f).value='');
+  renderGame(game);
+}
+
+// ════════════════════════════════════════════════════════════
+//  ADD — JACKPOT GAMES
+// ════════════════════════════════════════════════════════════
+function addPowerball(){
+  const date = document.getElementById('pb-date').value.trim();
+  const nums = [1,2,3,4,5].map(i=>parseInt(document.getElementById('pb-n'+i).value)||0);
+  const pb   = parseInt(document.getElementById('pb-pb').value)||0;
+  const pp   = parseInt(document.getElementById('pb-pp').value)||1;
+  if(!nums.every(n=>n>0)||!pb){ alert('Please enter all 5 white balls and the Powerball.'); return; }
+  APP.powerball.entries.push({date,nums,pb,pp,ts:now2()});
+  ['pb-date','pb-n1','pb-n2','pb-n3','pb-n4','pb-n5','pb-pb','pb-pp'].forEach(id=>document.getElementById(id).value='');
+  renderJackpot('powerball');
+}
+
+function addMega(){
+  const date = document.getElementById('mm-date').value.trim();
+  const nums = [1,2,3,4,5].map(i=>parseInt(document.getElementById('mm-n'+i).value)||0);
+  const mb   = parseInt(document.getElementById('mm-mb').value)||0;
+  const mp   = parseInt(document.getElementById('mm-mp').value)||0;
+  if(!nums.every(n=>n>0)||!mb){ alert('Please enter all 5 white balls and the Mega Ball.'); return; }
+  APP.megamillions.entries.push({date,nums,mb,mp,ts:now2()});
+  ['mm-date','mm-n1','mm-n2','mm-n3','mm-n4','mm-n5','mm-mb','mm-mp'].forEach(id=>document.getElementById(id).value='');
+  renderJackpot('megamillions');
+}
+
+function addLucky5(){
+  const state = (document.getElementById('l5-state').value.trim().toUpperCase()||'—');
+  const nums  = [1,2,3,4,5].map(i=>parseInt(document.getElementById('l5-n'+i).value)||0);
+  const bonus = parseInt(document.getElementById('l5-mega').value)||0;
+  if(!nums.every(n=>isNum50(n))){ alert('Please enter 5 ball numbers (1–50).'); return; }
+  if(!isNum27(bonus)){ alert('Please enter the Bonus ball number (1–27).'); return; }
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
+  const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  APP.lucky5.entries.push({state, nums, mega:bonus, date:dateStr, time:timeStr, ts:timeStr});
+  ['l5-n1','l5-n2','l5-n3','l5-n4','l5-n5','l5-mega'].forEach(id=>document.getElementById(id).value='');
+  renderJackpot('lucky5');
+}
+
+// ════════════════════════════════════════════════════════════
+//  REMOVE
+// ════════════════════════════════════════════════════════════
+function removeEntry(game, idx){
+  APP[game].entries.splice(idx,1);
+  renderGame(game);
+}
+function removeJackpot(game, idx){
+  APP[game].entries.splice(idx,1);
+  renderJackpot(game);
+}
+
+// ════════════════════════════════════════════════════════════
+//  CORE ANALYSIS ENGINE
+// ════════════════════════════════════════════════════════════
+function analyzePickN(game, n){
+  const g       = APP[game];
+  const curDraw = g.draw;
+
+  // ── filter to current draw time and most-recent date for that draw ──
+  // ts can be a date string 'M/D/YYYY' (preloaded) or a time string 'HH:MM AM' (user-added)
+  const drawTypeEntries = g.entries.filter(e => (!e.draw || e.draw === curDraw) && e.ts && e.ts.indexOf('/') !== -1);
+  const latestDrawDate = drawTypeEntries.reduce((latest, e) => {
+    if(!latest) return e.ts;
+    return new Date(e.ts) >= new Date(latest) ? e.ts : latest;
+  }, null);
+  const drawEntries_raw = g.entries.filter(e => {
+    if(!e.draw || e.draw === curDraw){
+      if(!e.ts) return true;                   // no timestamp: always include
+      const isDateTs = e.ts.indexOf('/') !== -1; // 'M/D/YYYY' vs 'HH:MM AM/PM'
+      if(isDateTs) return !latestDrawDate || e.ts === latestDrawDate; // match latest date for this draw
+      return true;                             // user-added (time ts): always include
+    }
+    return false;
+  });
+  // Deduplicate: keep only the last entry per state (latest/live fetch wins)
+  const seenA = new Map();
+  drawEntries_raw.forEach((e, i) => { seenA.set(e.state, i); });
+  const drawEntries = drawEntries_raw.filter((e, i) => seenA.get(e.state) === i);
+
+  const confirmed = drawEntries.filter(e=>e.status==='confirmed');
+  const partial   = drawEntries.filter(e=>e.status==='partial');
+  const pending   = drawEntries.filter(e=>e.status==='pending');
+  const allForAnalysis = [...confirmed, ...partial];
+
+  // pick5 = Fantasy 5 style (numbers 1-39)
+  // pick6 = standard Pick 6 style (numbers 1-49)
+  // others (pick3, pick4, cash3, daily3) = single digit 0-9
+  const isFan5  = game==='pick5';
+  const isPick6 = game==='pick6';
+  const isNumGame = isFan5 || isPick6;           // any game that uses multi-digit numbers
+  const poolSize  = isFan5 ? 39 : isPick6 ? 49 : 10;
+  const numOkFn   = isNumGame ? isNum49 : isDigit;
+
+  // position counters — pool[k] where k = digit(0-9) or number-1 (1-based offset)
+  const pos     = Array.from({length:n}, ()=>new Array(poolSize).fill(0));
+  const overall = new Array(poolSize).fill(0);
+
+  allForAnalysis.forEach(e=>{
+    e.nums.forEach((d,i)=>{
+      if(i >= n) return;  // skip extra balls (WB/FB) beyond position count
+      if(numOkFn(d)){
+        const di = isNumGame ? (parseInt(d)-1) : parseInt(d);  // 0-based index
+        if(di >= 0 && di < poolSize && pos[i]){ pos[i][di]++; overall[di]++; }
+      }
+    });
+  });
+
+  const totalBalls    = overall.reduce((a,b)=>a+b,0);
+  const maxFreq       = Math.max(...overall,1);
+  // sortedDigits: indices sorted by frequency (convert back to display value)
+  const pool          = [...Array(poolSize).keys()];
+  const sortedDigits  = [...pool].sort((a,b)=>overall[b]-overall[a]);
+  const absent        = pool.filter(d=>overall[d]===0);
+  const hotDigit      = isNumGame ? sortedDigits[0]+1 : sortedDigits[0];  // display as 1-based for number games
+  const nonZero       = sortedDigits.filter(d=>overall[d]>0);
+  const coldIdx       = nonZero.length>0 ? nonZero[nonZero.length-1] : undefined;
+  const coldDigit     = coldIdx !== undefined ? (isNumGame ? coldIdx+1 : coldIdx) : undefined;
+
+  const bestPerPos = pos.map(p=>{
+    const sorted = [...pool].sort((a,b)=>p[b]-p[a]);
+    return isNumGame ? sorted.map(k=>k+1) : sorted;  // display as 1-based for number games
+  });
+
+  // absentDisplay: human-readable (1-based for number games)
+  const absentDisplay = isNumGame ? absent.map(k=>k+1) : absent;
+
+  return { confirmed, partial, pending, drawEntries,
+           pos, overall, totalBalls, maxFreq,
+           sortedDigits, absent, absentDisplay, hotDigit, coldDigit, bestPerPos, n, isNumGame, poolSize };
+}
+
+// ════════════════════════════════════════════════════════════
+//  RENDER — PICK-N GAMES
+// ════════════════════════════════════════════════════════════
+
+// Build the status filter bar HTML for a game panel
+function buildStatusFilterBar(game){
+  const f = APP[game].statusFilter || 'all';
+  return `<div class="status-filter-bar">
+    <label>🔽 Show:</label>
+    <button class="sf-btn sf-all${f==='all'?' active':''}" onclick="setStatusFilter('${game}','all')">All</button>
+    <button class="sf-btn sf-confirmed${f==='confirmed'?' active':''}" onclick="setStatusFilter('${game}','confirmed')">✅ Confirmed</button>
+    <button class="sf-btn sf-partial${f==='partial'?' active':''}" onclick="setStatusFilter('${game}','partial')">🔷 Partial</button>
+    <button class="sf-btn sf-pending${f==='pending'?' active':''}" onclick="setStatusFilter('${game}','pending')">⏳ Pending</button>
+  </div>`;
+}
+
+function renderGame(game){
+  const g       = APP[game];
+  const n       = {pick3:3,pick4:4,pick5:5,pick6:6,cash3:3,daily3:3}[game];
+  const prefix  = {pick3:'p3',pick4:'p4',pick5:'p5',pick6:'p6',cash3:'c3',daily3:'d3'}[game];
+  const curDraw = g.draw;
+  const sf      = g.statusFilter || 'all';   // current status view-filter
+  const an      = analyzePickN(game, n);
+  const { confirmed, partial, pending, drawEntries,
+          pos, overall, totalBalls, maxFreq,
+          sortedDigits, absent, absentDisplay, hotDigit, coldDigit, bestPerPos,
+          isNumGame, poolSize } = an;
+
+  // ── SUMMARY BAR ──
+  const setEl = (id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+  setEl(prefix+'-s-draws',   confirmed.length);
+  setEl(prefix+'-s-partial', partial.length);
+  setEl(prefix+'-s-balls',   totalBalls);
+  setEl(prefix+'-s-pending', pending.length);
+  setEl(prefix+'-s-hot',     totalBalls>0 ? `${hotDigit} (${overall[hotDigit]}×)` : '—');
+  const coldEl = document.getElementById(prefix+'-s-cold');
+  if(coldEl) coldEl.textContent = coldDigit!==undefined ? `${coldDigit} (${overall[coldDigit]}×)` : '—';
+  const absentEl = document.getElementById(prefix+'-s-absent');
+  if(absentEl){
+    if(totalBalls===0){ absentEl.textContent='—'; absentEl.classList.remove('sb-val-sm'); }
+    else if(absent.length===0){ absentEl.textContent='none'; absentEl.classList.remove('sb-val-sm'); }
+    else{ absentEl.textContent=absent.join(' '); absentEl.classList.add('sb-val-sm'); }
+  }
+  setEl(prefix+'-s-pick',    confirmed.length>0 ? bestPerPos.map(bp=>bp[0]).join('-') : '—');
+
+  // ── PART 1: SCOREBOARD with status filter ──
+  // Render the filter bar into the stable container div
+  const filterBarEl = document.getElementById(prefix+'-filter-bar');
+  if(filterBarEl) filterBarEl.innerHTML = buildStatusFilterBar(game);
+
+  const tbody = document.getElementById(prefix+'-tbody');
+  if(tbody){
+    // All entries for this draw time and most-recent date for that draw type
+    const drawTypeEntries2 = g.entries.filter(e => (!e.draw || e.draw === curDraw) && e.ts && e.ts.indexOf('/') !== -1);
+    const latestDrawDate2 = drawTypeEntries2.reduce((latest, e) => {
+      if(!latest) return e.ts;
+      return new Date(e.ts) >= new Date(latest) ? e.ts : latest;
+    }, null);
+    const drawFiltered = g.entries.filter(e => {
+      if(!e.draw || e.draw === curDraw){
+        if(!e.ts) return true;
+        const isDateTs = e.ts.indexOf('/') !== -1;
+        if(isDateTs) return !latestDrawDate2 || e.ts === latestDrawDate2;
+        return true;
+      }
+      return false;
+    });
+    // Deduplicate: keep only the LAST entry per state (latest wins, e.g. from live fetch)
+    const seenStates = new Map();
+    drawFiltered.forEach((e, i) => { seenStates.set(e.state, i); });
+    const drawDeduped = drawFiltered.filter((e, i) => seenStates.get(e.state) === i);
+    // Apply status view-filter
+    const show = sf==='all' ? drawDeduped
+               : drawDeduped.filter(e=>e.status===sf);
+
+    // colspan: pick3=7, pick4=7, pick5=8, pick6=9, cash3/daily3=6
+    const colCount = n===3?(game==='pick3'?7:6):(n===4?7:(n+3));
+
+    if(show.length===0){
+      const msg = sf==='all' ? `No ${curDraw} draws yet — add one above` : `No ${sf} results for ${curDraw}`;
+      tbody.innerHTML=`<tr><td colspan="${colCount}" style="text-align:center;color:var(--muted);padding:18px">${msg}</td></tr>`;
+    } else {
+      tbody.innerHTML = show.map(e=>{
+        const realIdx = g.entries.indexOf(e);
+        const sCls = e.status==='confirmed'?'status-confirmed':e.status==='partial'?'status-partial':'status-pending';
+        const sTxt = e.status==='confirmed'?'✅ Confirmed':e.status==='partial'?'🔷 Partial':'⏳ Pending';
+        const balls = e.nums.map((d,pi)=>ballHtml(d,pi)).join('');
+        const removeBtn = `<button class="btn btn-danger" style="padding:2px 7px;font-size:.7rem" onclick="removeEntry('${game}',${realIdx})" title="Remove">✕</button>`;
+        // action buttons: edit (always), confirm (only for non-confirmed)
+        const editBtn   = `<button class="btn-edit" onclick="editEntry('${game}',${realIdx})" title="Edit digits">✎</button>`;
+        const confirmBtn = e.status!=='confirmed'
+          ? `<button class="btn-confirm" onclick="confirmEntry('${game}',${realIdx})" title="Mark confirmed">✓</button>`
+          : '';
+        const actions = `<div style="display:flex;gap:4px">${confirmBtn}${editBtn}${removeBtn}</div>`;
+
+        if(n===3){
+          const wbCol = game==='pick3'?`<td style="color:var(--muted);font-size:.73rem">${e.wb||'—'}</td>`:'';
+          return `<tr>
+            <td><strong>${e.state}</strong></td>
+            <td>${ballHtml(e.nums[0],0)}</td>
+            <td>${ballHtml(e.nums[1],1)}</td>
+            <td>${ballHtml(e.nums[2],2)}</td>
+            ${wbCol}
+            <td><span class="${sCls}">${sTxt}</span></td>
+            <td>${actions}</td>
+          </tr>`;
+        } else if(n===4){
+          return `<tr>
+            <td><strong>${e.state}</strong></td>
+            <td>${ballHtml(e.nums[0],0)}</td>
+            <td>${ballHtml(e.nums[1],1)}</td>
+            <td>${ballHtml(e.nums[2],2)}</td>
+            <td>${ballHtml(e.nums[3],3)}</td>
+            <td><span class="${sCls}">${sTxt}</span></td>
+            <td>${actions}</td>
+          </tr>`;
+        } else {
+          // Pick 5/6: show individual position balls
+          const posBalls = e.nums.map((d,pi)=>`<td>${ballHtml(d,pi)}</td>`).join('');
+          return `<tr>
+            <td><strong>${e.state}</strong></td>
+            ${posBalls}
+            <td><span class="${sCls}">${sTxt}</span></td>
+            <td>${actions}</td>
+          </tr>`;
+        }
+      }).join('');
+    }
+  }
+
+  if(totalBalls===0) return;
+
+  // ── PART 2: FREQUENCY TABLE ──
+  const freqEl = document.getElementById(prefix+'-freq');
+  if(freqEl){
+    const mf = Math.max(...overall,1);
+    // pool: 0-9 for standard games; 0-38 (display 1-39) for pick5/Fantasy5
+    const poolArr = [...Array(poolSize).keys()];
+    const dispVal = k => isNumGame ? k+1 : k;  // display value
+    freqEl.innerHTML = `
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <table style="width:100%;min-width:340px;border-collapse:collapse;font-size:.78rem">
+        <thead><tr style="color:var(--muted);font-size:.7rem">
+          <th style="padding:3px 6px;text-align:left">${isNumGame?'Number':'Digit'}</th>
+          <th style="padding:3px 6px;text-align:center">Total</th>
+          ${pos.map((_,i)=>`<th style="padding:3px 6px;text-align:center;color:${POS_COLORS[i]}">P${i+1}</th>`).join('')}
+          <th style="padding:3px 6px;text-align:right">%</th>
+          <th style="padding:3px 6px;min-width:70px">Bar</th>
+          <th style="padding:3px 6px">Flag</th>
+        </tr></thead>
+        <tbody>
+          ${[...poolArr].sort((a,b)=>overall[b]-overall[a]).map(k=>{
+            const d=dispVal(k);
+            const cnt=overall[k];
+            const pct=totalBalls>0?(cnt/totalBalls*100).toFixed(0):0;
+            const bw=mf>0?(cnt/mf*100).toFixed(0):0;
+            const bc=cnt===0?'freq-zero':cnt>=mf*.6?'freq-hot':cnt>=mf*.3?'freq-warm':'freq-cold';
+            const bc2=cnt===0?'ball-absent':cnt>=mf*.6?'ball-hot':cnt>=mf*.3?'ball-warm':'ball-cold';
+            const flag=cnt===0?'❌':cnt>=mf*.6?'🔥':cnt>=mf*.3?'🟡':'❄️';
+            const bSize=isNumGame?'width:38px;height:30px;border-radius:15px;font-size:.7rem;letter-spacing:0':'width:24px;height:24px;font-size:.76rem';
+            const b2d  = isNumGame ? ' ball-2d' : '';
+            return `<tr>
+              <td style="padding:3px 6px"><span class="ball ${bc2}${b2d}" style="${bSize}">${d}</span></td>
+              <td style="padding:3px 6px;text-align:center;font-weight:700">${cnt}×</td>
+              ${pos.map(p=>`<td style="padding:3px 6px;text-align:center;color:var(--muted)">${p[k]}</td>`).join('')}
+              <td style="padding:3px 6px;text-align:right;color:var(--muted);font-size:.72rem">${pct}%</td>
+              <td style="padding:3px 6px"><div class="freq-bar-wrap"><div class="freq-bar ${bc}" style="width:${bw}%"></div></div></td>
+              <td style="padding:3px 6px;text-align:center">${flag}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      </div>`;
+  }
+
+  // ── PART 3: POSITION MAPS ──
+  const pmEl = document.getElementById(prefix+'-posmaps');
+  if(pmEl){
+    const poolArr2 = [...Array(poolSize).keys()];
+    const dispVal2 = k => isNumGame ? k+1 : k;
+    pmEl.innerHTML = pos.map((p,pi)=>{
+      const maxP      = Math.max(...p,1);
+      const missing   = poolArr2.filter(k=>p[k]===0);
+      const mostCommonK = [...poolArr2].sort((a,b)=>p[b]-p[a])[0];
+      const overdue = missing.map(k=>{
+        let gap=0;
+        for(let i=confirmed.length-1;i>=0;i--){
+          const val = confirmed[i].nums[pi];
+          const ki  = isNumGame ? (parseInt(val)-1) : parseInt(val);
+          if(ki===k) break;
+          gap++;
+        }
+        return {d:dispVal2(k), gap:gap===confirmed.length?'Never':gap};
+      }).sort((a,b)=>(b.gap==='Never'?9999:b.gap)-(a.gap==='Never'?9999:a.gap));
+
+      // for position map cells — limit to 20 for fantasy5 (show condensed)
+      const cellKeys = poolArr2;
+      const cellStyle = isNumGame ? 'min-width:26px;font-size:.65rem;padding:2px' : '';
+
+      return `
+        <div style="margin-bottom:12px">
+          <div class="pos-label" style="color:${POS_COLORS[pi]}">P${pi+1} POSITION MAP — ${confirmed.length} confirmed draws</div>
+          <div class="pos-map" style="flex-wrap:wrap">
+            ${cellKeys.map(k=>{
+              const cnt=p[k];
+              const cls=cnt===0?'pos-missing':cnt>=maxP*.6?'pos-hot':'pos-seen';
+              return `<div class="${cls}" style="${cellStyle}" title="Number ${dispVal2(k)}: ${cnt}×">${dispVal2(k)}<br><small style="font-size:.6rem">${cnt}×</small></div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:.75rem">
+            <span>❌ <strong>Missing:</strong> ${missing.length>0?missing.map(k=>dispVal2(k)).join(', '):'none'}</span>
+            <span>🔥 <strong>Most seen:</strong> ${dispVal2(mostCommonK)} (${p[mostCommonK]}×)</span>
+            <span>⏳ <strong>Most overdue:</strong> ${overdue.length>0?`${overdue[0].d} (gap: ${overdue[0].gap})`:'none'}</span>
+          </div>
+        </div>
+        ${pi<pos.length-1?'<hr class="divider" style="margin:8px 0">':''}`;
+    }).join('');
+  }
+
+  // ── PART 4: BIAS DETECTION ──
+  const biasEl = document.getElementById(prefix+'-bias');
+  if(biasEl && totalBalls>0){
+    const biases=[];
+    const poolArr3 = [...Array(poolSize).keys()];
+    const dispVal3 = k => isNumGame ? k+1 : k;
+    poolArr3.forEach(k=>{
+      const total=overall[k]; if(total===0) return;
+      const inPos     = pos.map(p=>p[k]);
+      const onlyInOne = inPos.filter(c=>c>0).length===1;
+      const neverP1   = pos[0] ? pos[0][k]===0 : true;
+      const onlyP1    = pos[0] ? pos[0][k]>0 && pos.slice(1).every(p=>p[k]===0) : false;
+      const dominant  = total>=(totalBalls/poolSize)*2;
+      const d=dispVal3(k);
+      if(dominant && neverP1)
+        biases.push({cls:'bias-red',icon:'🔴',text:`Number <strong>${d}</strong> — HOT (${total}×) but NEVER in P1. Always lands in P2+.`});
+      else if(onlyP1 && total>0)
+        biases.push({cls:'bias-yellow',icon:'🟡',text:`Number <strong>${d}</strong> — appears ONLY in P1 (${total}×).`});
+      else if(onlyInOne && total>1)
+        biases.push({cls:'bias-blue',icon:'🔵',text:`Number <strong>${d}</strong> — all ${total} appearances in one single position.`});
+      else if(dominant)
+        biases.push({cls:'bias-green',icon:'🟢',text:`Number <strong>${d}</strong> — balanced dominant (${total}×) across positions.`});
+    });
+    const absentP1 = pos[0] ? poolArr3.filter(k=>pos[0][k]===0).map(k=>dispVal3(k)) : [];
+    if(absentP1.length>0 && absentP1.length<poolSize)
+      biases.push({cls:'bias-red',icon:'⚠️',text:`P1 has ZERO appearances for: <strong>${absentP1.slice(0,10).join(', ')}${absentP1.length>10?'...':''}</strong>`});
+    biasEl.innerHTML = biases.length>0
+      ? `<div class="bias-list">${biases.map(b=>`<div class="bias-item ${b.cls}">${b.icon} <span>${b.text}</span></div>`).join('')}</div>`
+      : `<div class="alert alert-success">✅ No strong positional bias detected yet.</div>`;
+  }
+  // ── PART 6: SNAPSHOT ──
+  const snapEl = document.getElementById(prefix+'-snapshot');
+  if(snapEl && confirmed.length>0){
+    const primary   = bestPerPos.map(bp=>bp[0]).join('-');
+    const absentStr = absentDisplay.length>0?absentDisplay.slice(0,10).join(', ')+(absentDisplay.length>10?'...':''):'none';
+    const pendList    = pending.map(e=>e.state).join(', ')||'—';
+    const numOkSnap   = (game==='pick5'||game==='pick6') ? isNum49 : isDigit;
+    const partialList = partial.map(e=>`${e.state}(${e.nums.filter(d=>numOkSnap(d)).length}/${n})`).join(', ')||'—';
+    const p1hotK    = pos[0] ? [...Array(poolSize).keys()].sort((a,b)=>pos[0][b]-pos[0][a])[0] : 0;
+    const p1hotDisp = isNumGame ? p1hotK+1 : p1hotK;
+    const biasAlert = p1hotK !== sortedDigits[0]
+      ? `<span class="text-accent">⚡ P1 hottest (${p1hotDisp}) ≠ overall hottest (${hotDigit})</span>`
+      : `<span class="text-green">✅ No major positional bias</span>`;
+    snapEl.innerHTML=`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:.78rem">
+        <div class="card-sm"><span class="text-muted">📅 Draw</span><br><strong>${g.draw.toUpperCase()} — ${APP.date}</strong></div>
+        <div class="card-sm"><span class="text-muted">🔢 Draws</span><br><strong>${confirmed.length} confirmed / ${drawEntries.length} total</strong></div>
+        <div class="card-sm"><span class="text-muted">🔷 Partial</span><br><strong class="text-blue">${partialList}</strong></div>
+        <div class="card-sm"><span class="text-muted">⏳ Pending</span><br><strong>${pendList}</strong></div>
+        <div class="card-sm"><span class="text-muted">🎯 Primary Pick</span><br><strong class="text-accent">${primary}</strong></div>
+        <div class="card-sm"><span class="text-muted">🔥 Hottest</span><br><strong class="text-red">${hotDigit} (${overall[isNumGame?hotDigit-1:hotDigit]}×)</strong></div>
+        <div class="card-sm"><span class="text-muted">❌ Absent</span><br><strong class="text-muted">${absentStr}</strong></div>
+        <div class="card-sm" style="grid-column:1/-1"><span class="text-muted">🚨 Bias Alert</span><br>${biasAlert}</div>
+      </div>`;
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  ANALYSIS ENGINE — frequency / positional helpers
+// ════════════════════════════════════════════════════════════
+
+// ── Prime digits (0-9 scope): 2,3,5,7
+const PRIME_DIGITS = new Set([2,3,5,7]);
+// ── Low digits: 0-4, High: 5-9
+const LOW_DIGITS   = new Set([0,1,2,3,4]);
+
+// ── Get ALL historical confirmed entries for a game+draw (all dates) ──
+// ML FIX: optionally filter by drawType so SA/FA are draw-specific (midday vs evening)
+// Falls back to all-types if drawType not provided or not enough data
+function getAllHistoryConfirmed(game, n, drawType){
+  const g = APP[game];
+  const all = g.entries.filter(e=>{
+    if(e.status!=='confirmed') return false;
+    return e.nums && e.nums.length>=n;
+  });
+  if(!drawType) return all;
+  const filtered = all.filter(e=> !e.draw || e.draw === drawType);
+  // Fall back to all draws if filtered set is too small for reliable stats
+  return filtered.length >= Math.max(n+2, 10) ? filtered : all;
+}
+
+// ── Recompute overall/pos frequency from any entry set ──
+// ML UPGRADE: supports temporal decay — recent draws weighted more heavily
+// decay=0 → uniform weights (original); decay=0.02 → ~50% weight at 35 draws ago
+function computeFreqFromEntries(entries, n, poolSize, isNumGame, decay){
+  const pos     = Array.from({length:n}, ()=>new Array(poolSize).fill(0));
+  const overall = new Array(poolSize).fill(0);
+  const len = entries.length;
+  entries.forEach((e,idx)=>{
+    const age = len - 1 - idx;                      // 0 = most recent
+    const w   = (decay > 0) ? Math.exp(-decay * age) : 1.0;
+    e.nums.slice(0,n).forEach((d,i)=>{
+      const k = isNumGame ? (parseInt(d)-1) : parseInt(d);
+      if(k>=0 && k<poolSize){ pos[i][k]+=w; overall[k]+=w; }
+    });
+  });
+  return {pos, overall};
+}
+// ════════════════════════════════════════════════════════════
+//  JACKPOT GAMES RENDERER
+// ════════════════════════════════════════════════════════════
+function renderJackpot(game){
+  if(game==='powerball')    renderPowerball();
+  else if(game==='megamillions') renderMega();
+  else if(game==='lucky5')  renderLucky5();
+}
+
+function freqMapHtml(freq, buckets){
+  const max = Math.max(...Object.values(freq).filter(v=>typeof v==='number'), 1);
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:6px">';
+  for(let i=1; i<=buckets; i++){
+    const cnt=freq[i]||0;
+    const cls=cnt===0?'ball-absent':cnt>=max*.6?'ball-hot':cnt>=max*.3?'ball-warm':'ball-cold';
+    // two-digit numbers (10+) get pill shape; single-digit get circle
+    const twoDig = i>=10 ? ' ball-2d' : '';
+    const sz = i>=10 ? 'width:32px;height:26px;border-radius:13px' : 'width:26px;height:26px';
+    html+=`<span class="ball ${cls}${twoDig}" style="${sz};font-size:.68rem" title="${i}: ${cnt}×">${i}</span>`;
+  }
+  html+='</div>';
+  return html;
+}
+
+function renderPowerball(){
+  const entries=APP.powerball.entries;
+  const sbEl=document.getElementById('pb-scoreboard');
+  const freqEl=document.getElementById('pb-freq');
+  const pbEl=document.getElementById('pb-pbfreq');
+  if(entries.length===0){
+    if(sbEl) sbEl.innerHTML='<div class="text-muted" style="padding:8px">No draws yet.</div>';
+    if(freqEl) freqEl.innerHTML='<div class="text-muted" style="padding:8px">Add draws to see frequency.</div>';
+    if(pbEl)  pbEl.innerHTML='<div class="text-muted" style="padding:8px">Add draws to see frequency.</div>';
+    ['pb-s-draws','pb-s-hot','pb-s-hotpb'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent='—'; });
+    document.getElementById('pb-s-draws').textContent='0';
+    document.getElementById('pb-s-absent').textContent='0';
+    return;
+  }
+  const wbFreq={}, pbFreq={};
+  entries.forEach(e=>{
+    e.nums.forEach(n=>{ wbFreq[n]=(wbFreq[n]||0)+1; });
+    pbFreq[e.pb]=(pbFreq[e.pb]||0)+1;
+  });
+  if(sbEl) sbEl.innerHTML=entries.map((e,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <span style="color:var(--muted);font-size:.72rem;width:48px">${e.date||e.ts}</span>
+      ${e.nums.map(n=>bigBallHtml(n,'wb')).join('')}
+      ${bigBallHtml(e.pb,'pb')}
+      ${e.pp>1?`<span style="color:var(--accent);font-size:.78rem;font-weight:700">${e.pp}×PP</span>`:''}
+      <button class="btn btn-danger" style="padding:2px 6px;font-size:.68rem;margin-left:auto" onclick="removeJackpot('powerball',${i})">✕</button>
+    </div>`).join('');
+  const hotWB=Object.keys(wbFreq).sort((a,b)=>wbFreq[b]-wbFreq[a])[0]||'—';
+  const hotPB=Object.keys(pbFreq).sort((a,b)=>pbFreq[b]-pbFreq[a])[0]||'—';
+  const absent=[]; for(let i=1;i<=69;i++) if(!wbFreq[i]) absent.push(i);
+  const ppEntries=entries.filter(e=>e.pp>1); const avgPP=ppEntries.length?( ppEntries.reduce((s,e)=>s+e.pp,0)/ppEntries.length ).toFixed(1)+'×':'—';
+  document.getElementById('pb-s-draws').textContent=entries.length;
+  document.getElementById('pb-s-hot').textContent=hotWB?`${hotWB} (${wbFreq[hotWB]}×)`:'—';
+  document.getElementById('pb-s-hotpb').textContent=hotPB?`${hotPB} (${pbFreq[hotPB]}×)`:'—';
+  document.getElementById('pb-s-absent').textContent=absent.length;
+  const ppEl=document.getElementById('pb-s-avgpp'); if(ppEl) ppEl.textContent=avgPP;
+  if(freqEl) freqEl.innerHTML=freqMapHtml(wbFreq,69);
+  if(pbEl)   pbEl.innerHTML  =freqMapHtml(pbFreq,26);
+}
+
+function renderMega(){
+  const entries=APP.megamillions.entries;
+  const sbEl=document.getElementById('mm-scoreboard');
+  if(entries.length===0){
+    if(sbEl) sbEl.innerHTML='<div class="text-muted" style="padding:8px">No draws yet.</div>';
+    ['mm-freq','mm-mbfreq'].forEach(id=>{ const e=document.getElementById(id); if(e) e.innerHTML='<div class="text-muted" style="padding:8px">Add draws to see frequency.</div>'; });
+    document.getElementById('mm-s-draws').textContent='0';
+    ['mm-s-hot','mm-s-hotmb','mm-s-hotmp'].forEach(id=>{ const e=document.getElementById(id); if(e) e.textContent='—'; });
+    document.getElementById('mm-s-absent').textContent='0';
+    return;
+  }
+  const wbFreq={}, mbFreq={};
+  let mpSum=0, mpCount=0;
+  entries.forEach(e=>{
+    e.nums.forEach(n=>{ wbFreq[n]=(wbFreq[n]||0)+1; });
+    mbFreq[e.mb]=(mbFreq[e.mb]||0)+1;
+    if(e.mp){ mpSum+=e.mp; mpCount++; }
+  });
+  if(sbEl) sbEl.innerHTML=entries.map((e,i)=>`
+    <div style="display:flex;align-items:center;gap:6px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+      <span style="color:var(--muted);font-size:.72rem;width:48px">${e.date||e.ts}</span>
+      ${e.nums.map(n=>bigBallHtml(n,'wb')).join('')}
+      ${bigBallHtml(e.mb,'mb')}
+      ${e.mp>1?`<span style="color:var(--accent2);font-size:.78rem;font-weight:700">${e.mp}×MP</span>`:''}
+      <button class="btn btn-danger" style="padding:2px 6px;font-size:.68rem;margin-left:auto" onclick="removeJackpot('megamillions',${i})">✕</button>
+    </div>`).join('');
+  const hotWB=Object.keys(wbFreq).sort((a,b)=>wbFreq[b]-wbFreq[a])[0]||'—';
+  const hotMB=Object.keys(mbFreq).sort((a,b)=>mbFreq[b]-mbFreq[a])[0]||'—';
+  const absent=[]; for(let i=1;i<=70;i++) if(!wbFreq[i]) absent.push(i);
+  const avgMP = mpCount>0 ? (mpSum/mpCount).toFixed(1)+'×' : '—';
+  document.getElementById('mm-s-draws').textContent=entries.length;
+  document.getElementById('mm-s-hot').textContent=hotWB?`${hotWB} (${wbFreq[hotWB]}×)`:'—';
+  document.getElementById('mm-s-hotmb').textContent=hotMB?`${hotMB} (${mbFreq[hotMB]}×)`:'—';
+  document.getElementById('mm-s-absent').textContent=absent.length;
+  const mpEl=document.getElementById('mm-s-hotmp'); if(mpEl) mpEl.textContent=avgMP;
+  document.getElementById('mm-freq').innerHTML  =freqMapHtml(wbFreq,70);
+  document.getElementById('mm-mbfreq').innerHTML=freqMapHtml(mbFreq,25);
+}
+
+function renderLucky5(){
+  const entries=APP.lucky5.entries;
+  const sbEl   =document.getElementById('l5-scoreboard');
+  const freqEl =document.getElementById('l5-freq');
+  const megaEl =document.getElementById('l5-megafreq');
+  const setEl  =(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
+
+  // ── live clock in summary banner ─────────────────────────────
+  const clockEl=document.getElementById('l5-s-clock');
+  if(clockEl){
+    const now=new Date();
+    clockEl.textContent=now.toLocaleString('en-US',{timeZone:'America/New_York',month:'2-digit',day:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' ET';
+  }
+
+  if(entries.length===0){
+    if(sbEl)   sbEl.innerHTML  ='<div class="text-muted" style="padding:8px">No draws yet.</div>';
+    if(freqEl) freqEl.innerHTML='<div class="text-muted" style="padding:8px">Add draws to see frequency.</div>';
+    if(megaEl) megaEl.innerHTML='<div class="text-muted" style="padding:8px">Add draws to see frequency.</div>';
+    setEl('l5-s-draws','0'); setEl('l5-s-hot','—'); setEl('l5-s-hotmega','—'); setEl('l5-s-absent','0');
+    return;
+  }
+
+  // ── frequency maps ──────────────────────────────────────────
+  const wbFreq={}, mgFreq={};
+  entries.forEach(e=>{
+    e.nums.forEach(n=>{ wbFreq[n]=(wbFreq[n]||0)+1; });
+    if(e.mega) mgFreq[e.mega]=(mgFreq[e.mega]||0)+1;
+  });
+
+  // ── scoreboard rows (grouped display: state | date time | balls | bonus | ✕) ──
+  if(sbEl) sbEl.innerHTML=
+    '<div style="display:flex;flex-direction:column;gap:0">'+
+    '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:2px solid var(--border);font-size:.68rem;color:var(--muted);font-weight:700">'+
+      '<span style="width:38px">State</span>'+
+      '<span style="width:130px">Date</span>'+
+      '<span style="flex:1">Balls</span>'+
+      '<span style="width:52px">Bonus</span>'+
+    '</div>'+
+    entries.map((e,i)=>{
+      const stLbl = e.state||'—';
+      const dtLbl = e.date ? `${e.date}` : '';
+      const tmLbl = e.time || e.ts || '';
+      return `
+      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
+        <span style="width:38px;font-size:.78rem;font-weight:700;color:var(--accent)">${stLbl}</span>
+        <span style="width:130px;font-size:.68rem;color:var(--muted);white-space:nowrap">${dtLbl}<br><span style="color:var(--accent2)">${tmLbl}</span></span>
+        <span style="display:flex;gap:4px;flex-wrap:wrap;flex:1">${e.nums.map(n=>bigBallHtml(n,'wb')).join('')}</span>
+        ${bigBallHtml(e.mega,'slmega')}
+        <button class="btn btn-danger" style="padding:2px 6px;font-size:.68rem;margin-left:4px" onclick="removeJackpot('lucky5',${i})">✕</button>
+      </div>`;
+    }).join('')+'</div>';
+
+  // ── summary stats ─────────────────────────────────────────────
+  const hotWB  = Object.keys(wbFreq).sort((a,b)=>wbFreq[b]-wbFreq[a])[0]||'—';
+  const hotMega= Object.keys(mgFreq).sort((a,b)=>mgFreq[b]-mgFreq[a])[0]||'—';
+  const absentWB=[]; for(let i=1;i<=50;i++) if(!wbFreq[i]) absentWB.push(i);
+
+  setEl('l5-s-draws',   entries.length);
+  setEl('l5-s-hot',     hotWB !=='—' ? `${hotWB} (${wbFreq[hotWB]}×)`   : '—');
+  setEl('l5-s-hotmega', hotMega!=='—' ? `${hotMega} (${mgFreq[hotMega]}×)` : '—');
+  setEl('l5-s-absent',  absentWB.length+' of 50');
+
+  // ── frequency displays ────────────────────────────────────────
+  if(freqEl) freqEl.innerHTML=freqMapHtml(wbFreq,50);
+  if(megaEl) megaEl.innerHTML=freqMapHtml(mgFreq,27);
+}
+
+// ════════════════════════════════════════════════════════════
+//  KEYBOARD: Enter submits current active game form
+// ════════════════════════════════════════════════════════════
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){
+    const g=APP.currentGame;
+    if(g==='pick3')   addPick3();
+    else if(g==='pick4')   addPickN('pick4',4);
+    else if(g==='pick5')   addPickN('pick5',5);
+    else if(g==='pick6')   addPickN('pick6',6);
+    else if(g==='cash3')   addGeneric3('cash3');
+    else if(g==='daily3')  addGeneric3('daily3');
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════
+//  DATE SELECTOR INIT  (Today-only: single option shown)
+// ════════════════════════════════════════════════════════════
+(function initDate(){
+  var sel=document.getElementById('dateSelect');
+  if(!sel) return;
+  sel.innerHTML='';
+  var opt=document.createElement('option');
+  opt.value=todayET();
+  // Use lottery-day date (todayET) for the label, not raw calendar date
+  const lotteryDayStr = todayET(); // e.g. "03/22/2026"
+  const [ldm, ldd, ldy] = lotteryDayStr.split('/');
+  const lotteryDateObj = new Date(parseInt(ldy), parseInt(ldm)-1, parseInt(ldd), 12, 0, 0);
+  opt.textContent='Today — ' + lotteryDateObj.toLocaleDateString('en-US',{
+    month:'short', day:'numeric', year:'numeric'
+  });
+  opt.selected=true;
+  sel.appendChild(opt);
+})();
+
+// ════════════════════════════════════════════════════════════
+//  BOOT SEQUENCE
+//  1. loadState(): if today's localStorage snapshot exists, restore.
+//  2. Otherwise on first open of the day: auto-fetch live results
+//     from the API so every new day gets fresh accurate numbers.
+//  3. The ↺ Update button re-fetches at any time.
+//  4. resetForNewDay() runs at midnight (30-sec watcher) to clear.
+// ════════════════════════════════════════════════════════════
+if(loadState()){
+  // Restore from localStorage — re-render all panels
+  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){
+    renderGame(g);
+    var panel = document.getElementById('panel-'+g);
+    if(panel){
+      panel.querySelectorAll('.draw-tab').forEach(function(t){
+        var m = (t.getAttribute('onclick')||'').match(/setDraw\('[^']+','([^']+)'/);
+        if(m) t.classList.toggle('active', m[1]===APP[g].draw);
+      });
+    }
+  });
+  ['powerball','megamillions','lucky5'].forEach(function(g){ renderJackpot(g); });
+  _lastDataUpdate = new Date();
+  console.log('[Scoreboard] Restored ' + todayET() + ' from localStorage');
+  // Re-fetch after a short delay to pick up any draws that came in since last save
+  setTimeout(function(){ fetchLiveAndRender(); }, 2000);
+
+} else {
+  // First load of the day: auto-fetch live results from the API.
+  // This ensures every new day gets accurate numbers without manual hard-coding.
+  console.log('[Scoreboard] First load ' + todayET() + ' — auto-fetching live data');
+  APP.date = todayET();
+  // Render empty boards immediately so the UI is visible while fetching
+  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){ renderGame(g); });
+  ['powerball','megamillions','lucky5'].forEach(function(g){ renderJackpot(g); });
+  // Trigger live fetch after DOM settles (100 ms delay)
+  setTimeout(function(){ fetchLiveAndRender(); }, 100);
+
+// ════════════════════════════════════════════════════════════
+//  ARCHIVED PRE-LOAD DATA — 3/22/2026 ONLY (historical reference)
+//  This block is NEVER executed on a new day (auto-fetch runs instead).
+//  Kept here for reference / manual restore if needed.
+//  To manually restore: call window._restorePreload_3_22_2026()
+// ════════════════════════════════════════════════════════════
+window._restorePreload_3_22_2026 = function(){
+  console.log('[Scoreboard] Restoring archived 3/22/2026 preload data');
+  if(false){ // guard: never auto-run
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD PICK 3 — 3/22/2026 (today's confirmed + pending)
+// ════════════════════════════════════════════════════════════
+(function preloadDemo(){
+  var midday=[
+    {state:'GA', nums:['1','6','8'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // ga_cash3_midday ✓ lotteryusa/lottostrategies
+    {state:'OH', nums:['8','4','5'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // ohiolottery.com ✓
+    {state:'PA', nums:['8','5','7'], wb:'9', status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotteryusa PA pick3 day ✓
+    {state:'VA', nums:['0','4','8'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // valottery.com DAY ✓
+    {state:'NJ', nums:['8','6','7'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotteryusa NJ pick3 midday ✓
+    // TN Cash 3: no midday draw on Sundays
+    {state:'FL', nums:['9','8','5'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotteryusa FL pick3 midday ✓
+    {state:'NY', nums:['8','9','2'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // nylottery.org ✓
+    {state:'MD', nums:['2','4','9'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // mdlottery.com / lottostrategies ✓
+    {state:'NC', nums:['5','3','2'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotteryusa NC pick3 daytime ✓
+    {state:'CA', nums:['7','6','2'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // ca_midday3 ✓
+  ];
+  // Evening 3/22/2026
+  // GA Cash3 Evening  6:59PM ET:  1-2-7   (lotteryusa GA cash-3-evening ✓ + lotterypost calendar ✓)
+  // TN Cash3 Evening  6:28PM CT:  4-7-0   (lotteryusa TN cash-3 ✓)
+  // MI Daily3 Evening 7:29PM ET:  2-7-5   (lotterycorner/lottoedge MI daily-3 ✓)
+  // OH Pick3 Evening  7:29PM ET:  9-1-0   (ohiolottery.com ✓)
+  // MD Pick3 Evening  7:56PM ET:  9-7-3   (lotterypost.com MD pick3 ✓)
+  // PA Pick3 Evening  6:59PM ET:  5-8-0   (lotteryusa PA pick3 ✓)
+  // VA Pick3 Night   11:00PM ET:  7-4-2   (lotterypost calendar VA pick3 night=742 ✓)
+  // NC Pick3 Evening  11:22PM ET:  2-4-2  (lotteryusa NC pick3 evening ✓)
+  // CA Daily3 Evening  6:30PM PT:  9-0-1  (ca_daily3 API ✓)
+  // FL Pick3 Evening   9:45PM ET:  6-7-6  (lotteryusa FL pick3 evening ✓)
+  // NJ Pick3 Evening  10:57PM ET:  5-6-3  (lotteryusa NJ pick3 evening ✓)
+  // NY Numbers Evening 10:30PM ET:  6-1-8  (nylottery.org ✓)
+  var evening=[
+    {state:'GA', nums:['1','2','7'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa GA cash-3-evening ✓
+    {state:'TN', nums:['4','7','0'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa TN cash-3 ✓
+    {state:'MI', nums:['2','7','5'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterycorner MI daily-3 ✓
+    {state:'OH', nums:['9','1','0'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // ohiolottery.com ✓
+    {state:'MD', nums:['9','7','3'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterypost MD pick3 ✓
+    {state:'PA', nums:['5','8','0'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa PA pick3 ✓
+    {state:'VA', nums:['7','4','2'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterypost calendar VA pick3 night ✓
+    {state:'NC', nums:['2','4','2'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa NC pick3 evening ✓
+    {state:'CA', nums:['9','0','1'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // ca_daily3 API ✓
+    {state:'FL', nums:['6','7','6'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa FL pick3 evening ✓
+    {state:'NJ', nums:['5','6','3'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa NJ pick3 evening ✓
+    {state:'NY', nums:['6','1','8'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // nylottery.org ✓
+  ];
+  midday.concat(evening).forEach(function(e){ APP.pick3.entries.push(e); });
+  APP.date = todayET();
+  APP.pick3.draw='evening';
+  var eveningTab=document.querySelector('#panel-pick3 .draw-tab:nth-child(2)');
+  if(eveningTab){
+    document.querySelectorAll('#panel-pick3 .draw-tab').forEach(function(t){ t.classList.remove('active'); });
+    eveningTab.classList.add('active');
+  }
+  renderGame('pick3');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD PICK 4 — 3/22/2026 MIDDAY
+// ════════════════════════════════════════════════════════════
+// GA Cash4 Midday 12:29PM: 7-6-0-4    (lotteryusa GA cash4 midday ✓)
+// OH Pick4 Midday 12:29PM: 6-1-5-0    (ohiolottery.com archive ✓)
+// PA Pick4 Day    1:35PM: 1-0-9-5 WB:9 (lotteryusa PA pick4 day ✓)
+// VA Pick4 Day    1:59PM: 0-9-7-3 FB:5 (valottery.com ✓)
+// FL Pick4 Midday 1:30PM: 5-6-9-3     (API fl_pick4_midday ✓)
+// NJ Pick4 Midday 12:59PM: 0-0-6-3    (lotteryusa NJ pick-4 midday ✓)
+// NY Win4 Midday  2:30PM: 4-5-1-3     (nylottery.org / lottostrategies ✓)
+// MD Pick4 Midday 12:28PM: 6-4-2-2    (lotterypost.com MD pick4 ✓)
+// NC: no Sunday daytime draw (weekdays + Sat only). CA Daily4: evening only (~6:45PM PT, pending).
+(function preloadPick4(){
+  var demo=[
+    {state:'GA', nums:['7','6','0','4'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotteryusa GA cash4 midday ✓
+    {state:'OH', nums:['6','1','5','0'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // ohiolottery.com ✓
+    {state:'PA', nums:['1','0','9','5'], wb:'9', status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotteryusa PA pick4 day ✓
+    {state:'VA', nums:['0','9','7','3'], wb:'5', status:'confirmed', draw:'midday', ts:'3/22/2026'}, // valottery.com ✓
+    {state:'FL', nums:['5','6','9','3'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // API fl_pick4_midday ✓
+    {state:'NJ', nums:['0','0','6','3'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotteryusa NJ pick-4 midday ✓
+    {state:'NY', nums:['4','5','1','3'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // nylottery.org ✓
+    {state:'MD', nums:['6','4','2','2'], wb:'',  status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotterypost MD pick4 ✓
+    // Evening Pick4 results 3/22/2026
+    {state:'GA', nums:['4','3','8','3'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterypost GA cash4 evening ✓
+    {state:'OH', nums:['7','6','7','6'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // ohiolottery.com / lotterypost ✓
+    {state:'PA', nums:['3','9','3','9'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterypost PA pick4 evening ✓
+    {state:'NJ', nums:['8','0','7','3'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterypost NJ pick4 evening ✓
+    {state:'NY', nums:['0','7','8','3'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // nylottery.org Win4 evening ✓
+    {state:'FL', nums:['5','5','8','9'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterypost FL pick4 evening ✓
+    {state:'MD', nums:['?','?','?','?'], wb:'',  status:'pending',   draw:'evening', ts:'3/22/2026'}, // MD Sunday evening – checking
+    {state:'CA', nums:['?','?','?','?'], wb:'',  status:'pending',   draw:'evening', ts:'3/22/2026'}, // CA daily4 evening pending
+  ];
+  demo.forEach(function(e){ APP.pick4.entries.push(e); });
+  APP.pick4.draw='midday';
+  renderGame('pick4');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD PICK 5 — 3/22/2026
+// ════════════════════════════════════════════════════════════
+(function preloadPick5(){
+  // PICK 5 - 3/22/2026 CONFIRMED MIDDAY + PENDING EVENING
+  // GA Five Midday 12:29PM: 8-9-1-9-3  (lotterycorner.com)
+  // FL Pick5 Midday 1:30PM: 2-0-6-4-5 FB:4 (lotteryusa.com)
+  // NY Take5 Midday 2:30PM: 5-8-19-23-38 (lotteryusa.com)
+  // MI/OH/VA/CA: no midday draw (evening only). TX: no Sunday draw.
+  var demo=[
+    {state:'GA', nums:['8','9','1','9','3'],    wb:'',  status:'confirmed', draw:'midday',  ts:'3/22/2026'},
+    {state:'FL', nums:['2','0','6','4','5'],    wb:'4', status:'confirmed', draw:'midday',  ts:'3/22/2026'},
+    {state:'NY', nums:['5','8','19','23','38'], wb:'',  status:'confirmed', draw:'midday',  ts:'3/22/2026'},
+    // Evening Pick5 3/22/2026
+    {state:'VA', nums:['2','5','3','7','5'],    wb:'4', status:'confirmed', draw:'midday',  ts:'3/22/2026'}, // valottery.com Pick5 Day ✓
+    {state:'MI', nums:['2','4','16','21','31'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa MI Fantasy5 ✓
+    {state:'OH', nums:['1','6','11','21','24'], wb:'',  status:'confirmed', draw:'evening', ts:'3/22/2026'}, // ohiolottery.com Rolling Cash5 ✓
+    {state:'CA', nums:['?','?','?','?','?'],    wb:'',  status:'pending',   draw:'evening', ts:'3/22/2026'}, // CA Fantasy5 evening pending
+  ];
+  demo.forEach(function(e){ APP.pick5.entries.push(e); });
+  APP.pick5.draw='midday';
+  renderGame('pick5');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD PICK 6 — 3/22/2026
+// ════════════════════════════════════════════════════════════
+(function preloadPick6(){
+  // PICK 6 - 3/22/2026 (Sunday) - NO DRAWS TODAY
+  // NJ Pick6: Mon/Wed/Thu only. NY: Wed/Sat only. PA Match6: Mon/Wed/Sat only.
+  // CT Classic Lotto / MA Megabucks: Wed/Sat only. Next draws: Mon 3/23/2026.
+  var demo=[
+    {state:'NJ', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
+    {state:'NY', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
+    {state:'PA', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
+    {state:'CT', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
+    {state:'MA', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
+  ];
+  demo.forEach(function(e){ APP.pick6.entries.push(e); });
+  APP.pick6.draw='midday';
+  renderGame('pick6');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD CASH 3 — 3/22/2026
+// ════════════════════════════════════════════════════════════
+(function preloadCash3(){
+  // GA Cash3 Midday 12:29PM: 1-6-8 (lotteryusa / lottostrategies ✓)
+  // TN Cash3: no midday draw on Sundays
+  // FL Pick3 Midday 1:30PM: 9-8-5 (lotteryusa FL pick3 midday ✓)
+  // GA Cash3 Evening 6:59PM: 1-2-7 (lotteryusa / lotterypost ✓)
+  // TN Cash3 Evening 6:28PM CT: 4-7-0 (lotteryusa ✓)
+  // FL Pick3 Evening 9:45PM: 6-7-6 (lotteryusa ✓)
+  // GA Cash3 Night 11:34PM: 5-5-1 (lotteryusa GA cash-3-night ✓)
+  var demo=[
+    {state:'GA', nums:['1','6','8'], wb:'', status:'confirmed', draw:'midday',  ts:'3/22/2026'}, // lotteryusa GA cash3 midday ✓
+    {state:'TN', nums:['?','?','?'], wb:'', status:'pending',   draw:'midday',  ts:'3/22/2026'}, // no Sunday midday draw
+    {state:'FL', nums:['9','8','5'], wb:'', status:'confirmed', draw:'midday',  ts:'3/22/2026'}, // lotteryusa FL pick3 midday ✓
+    // Evening 3/22/2026
+    {state:'GA', nums:['1','2','7'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa GA cash3 evening ✓
+    {state:'TN', nums:['4','7','0'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa TN cash3 evening ✓
+    {state:'FL', nums:['6','7','6'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa FL pick3 evening ✓
+    // Night 3/22/2026
+    {state:'GA', nums:['5','5','1'], wb:'', status:'confirmed', draw:'night',   ts:'3/22/2026'}, // lotteryusa GA cash3 night ✓
+  ];
+  demo.forEach(function(e){ APP.cash3.entries.push(e); });
+  APP.cash3.draw='midday';
+  renderGame('cash3');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD DAILY 3 — 3/22/2026
+// ════════════════════════════════════════════════════════════
+(function preloadDaily3(){
+  // MI Daily3 Midday 12:59PM: 8-9-0 (lotteryusa / lottostrategies ✓)
+  // IN Daily3 Midday 1:20PM: 9-9-1 SB:9 (lotterypost IN daily3 ✓)
+  // IL Pick3 Midday 12:40PM: 1-2-2 FB:7 (illinoislottery.com / lotteryusa ✓)
+  // MI Daily3 Evening 7:29PM: 2-7-5 (lotterycorner / lottoedge ✓)
+  // IN Daily3 Evening 11:00PM: 0-6-5 SB:0 (lotteryusa ✓)
+  // IL Pick3 Evening 9:22PM: 7-5-7 FB:0 (illinoislottery.com snippet ✓)
+  var demo=[
+    {state:'MI', nums:['8','9','0'], wb:'', status:'confirmed', draw:'midday',  ts:'3/22/2026'}, // lotteryusa MI daily3 midday ✓
+    {state:'IN', nums:['9','9','1'], wb:'9', status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotterypost IN daily3 midday ✓
+    {state:'IL', nums:['1','2','2'], wb:'7', status:'confirmed', draw:'midday', ts:'3/22/2026'}, // illinoislottery.com ✓
+    // Evening 3/22/2026
+    {state:'MI', nums:['2','7','5'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterycorner MI daily3 evening ✓
+    {state:'IN', nums:['0','6','5'], wb:'0', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa IN Daily3 evening ✓
+    {state:'IL', nums:['7','5','7'], wb:'0', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // illinoislottery.com ✓
+  ];
+  demo.forEach(function(e){ APP.daily3.entries.push(e); });
+  APP.daily3.draw='midday';
+  renderGame('daily3');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD POWERBALL — recent draws
+// ════════════════════════════════════════════════════════════
+(function preloadPowerball(){
+  var draws=[
+    {date:'3/14/2026', nums:[9,30,42,50,52],  pb:21, pp:3},
+    {date:'3/11/2026', nums:[3,6,55,58,63],   pb:12, pp:2},
+    {date:'3/9/2026',  nums:[22,23,28,36,54], pb:13, pp:3},
+    {date:'3/7/2026',  nums:[17,18,30,50,68], pb:24, pp:3},
+    {date:'3/4/2026',  nums:[7,14,42,47,56],  pb:6,  pp:4},
+    {date:'3/2/2026',  nums:[2,17,18,38,62],  pb:20, pp:2},
+  ];
+  draws.forEach(function(d){ APP.powerball.entries.push({date:d.date,nums:d.nums,pb:d.pb,pp:d.pp,ts:''}); });
+  renderJackpot('powerball');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD MEGA MILLIONS — recent draws
+// ════════════════════════════════════════════════════════════
+(function preloadMega(){
+  var draws=[
+    {date:'3/13/2026', nums:[6,19,36,40,55],  mb:9,  mp:3},
+    {date:'3/10/2026', nums:[16,21,30,35,65], mb:7,  mp:3},
+    {date:'3/6/2026',  nums:[8,19,26,38,42],  mb:24, mp:2},
+    {date:'3/3/2026',  nums:[7,21,53,54,62],  mb:16, mp:2},
+  ];
+  draws.forEach(function(d){ APP.megamillions.entries.push({date:d.date,nums:d.nums,mb:d.mb,mp:d.mp,ts:''}); });
+  renderJackpot('megamillions');
+})();
+
+// ════════════════════════════════════════════════════════════
+//  PRE-LOAD 5+BONUS — CA SuperLotto Plus recent draws
+// ════════════════════════════════════════════════════════════
+(function preloadLucky5(){
+  var draws=[
+    {state:'CA', date:'03/14/2026', time:'7:57 PM', nums:[10,15,16,21,33], mega:6},
+    {state:'CA', date:'03/11/2026', time:'7:57 PM', nums:[15,17,25,29,45], mega:11},
+    {state:'CA', date:'03/07/2026', time:'7:57 PM', nums:[2,22,34,35,44],  mega:3},
+    {state:'CA', date:'03/04/2026', time:'7:57 PM', nums:[7,8,32,43,47],   mega:3},
+    {state:'CA', date:'02/11/2026', time:'7:57 PM', nums:[3,5,7,8,46],     mega:17},
+    {state:'CA', date:'02/07/2026', time:'7:57 PM', nums:[4,19,22,33,43],  mega:12},
+  ];
+  draws.forEach(function(d){ APP.lucky5.entries.push({state:d.state, date:d.date, time:d.time, nums:d.nums, mega:d.mega, ts:d.time}); });
+  renderJackpot('lucky5');
+})();
+
+  // Persist fresh preload as today's baseline
+  saveState();
+  markDataUpdated();
+  console.log('[Scoreboard] Preload complete — saved to localStorage');
+
+  } // end if(false) guard
+}; // end _restorePreload_3_22_2026
+
+} // end else (first-load auto-fetch)
+
+// ════════════════════════════════════════════════════════════
+//  IFRAME BRIDGE — receive postMessage from parent Predictor page
+//  Supported actions:
+//    { action:'switchGame', game:'pick3', draw:'evening' }
+//    { action:'ping' }  → replies with { action:'pong', ready:true }
+// ════════════════════════════════════════════════════════════
+(function initIframeBridge(){
+  function handleParentMessage(evt){
+    // Accept messages from any origin (same-domain sandbox)
+    var data = evt.data;
+    if(!data || typeof data !== 'object') return;
+
+    if(data.action === 'ping'){
+      evt.source && evt.source.postMessage({action:'pong', ready:true}, evt.origin||'*');
+      return;
+    }
+
+    if(data.action === 'switchGame'){
+      var game = data.game || 'pick3';
+      var draw = data.draw || 'evening';
+
+      // Switch game tab
+      var btn = document.querySelector('[data-game="'+game+'"]');
+      if(btn) switchGame(game, btn);
+
+      // Switch draw tab (midday / evening)
+      setTimeout(function(){
+        var panel = document.getElementById('panel-'+game);
+        if(!panel) return;
+        panel.querySelectorAll('.draw-tab').forEach(function(t){
+          var m = (t.getAttribute('onclick')||'').match(/setDraw\('[^']+','([^']+)'/);
+          if(m){
+            if(m[1] === draw){ t.click(); }
+          }
+        });
+
+      }, 200);
+    }
+  }
+
+  window.addEventListener('message', handleParentMessage, false);
+
+  // On load: check URL hash for ?game=pick3&draw=evening or #pick3-evening
+  function applyURLParams(){
+    var hash   = window.location.hash.replace('#','');
+    var search = window.location.search;
+    var params = new URLSearchParams(search);
+    var game   = params.get('game') || (hash.split('-')[0]) || '';
+    var draw   = params.get('draw') || (hash.split('-')[1]) || 'evening';
+    var auto   = params.get('auto') || '';
+    var validGames = ['pick3','pick4','pick5','pick6','cash3','daily3','powerball','megamillions','lucky5'];
+    if(validGames.includes(game)){
+      var btn = document.querySelector('[data-game="'+game+'"]');
+      if(btn) switchGame(game, btn);
+      setTimeout(function(){
+        var panel = document.getElementById('panel-'+game);
+        if(!panel) return;
+        panel.querySelectorAll('.draw-tab').forEach(function(t){
+          var m = (t.getAttribute('onclick')||'').match(/setDraw\('[^']+','([^']+)'/);
+          if(m && m[1]===draw) t.click();
+        });
+
+      }, 300);
+    }
+  }
+  // Delay to let boot sequence finish
+  setTimeout(applyURLParams, 800);
+
+  // Apply embedded class if loaded inside iframe
+  if(new URLSearchParams(window.location.search).get('embedded') === '1'){
+    document.body.classList.add('embedded');
+  }
+})();
+
+
+</script>
+</body>
+</html>
