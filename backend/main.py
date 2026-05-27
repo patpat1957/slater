@@ -19,7 +19,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, Query, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import httpx
@@ -87,7 +87,7 @@ Real lottery results from official public sources. No fake/random numbers.
 ### Features
 - **Location-based lottery discovery** – find lotteries by US state
 - **Multi-lottery selection** – query multiple games in one request
-- **Date range filtering** – any date range up to 5 years
+- **Date range filtering** – any date range up to 10 years
 - **CSV export** – structured download with bonus-ball columns
 - **Real data only** – sourced from government open data + verified archives
 
@@ -256,24 +256,39 @@ async def root():
     """API info - returns API info and available endpoints."""
     return {
         "name": "Lotto Extraction API",
-        "version": "1.0.0",
+        "version": API_VERSION,
         "description": "Real lottery results extraction - no fake numbers",
         "data_sources": [
             "NY Open Data (data.ny.gov) - Official government lottery data",
             "lotto.net - Public historical results archive",
+            "lottery.net - Multi-state historical results archive",
+            "lotteryusa.com - Reliable recent draw results",
+            "louisianalottery.com - Official Louisiana CSV downloads",
+            "kslottery.com - Official Kansas lottery results",
+            "kylottery.com - Official Kentucky lottery API",
         ],
         "endpoints": {
             "GET /lotteries/by-state/{state_code}": "Get available lotteries for a state",
             "GET /lotteries/all-states": "List all states with their supported lotteries",
             "GET /lotteries/detect-location": "Auto-detect state from IP and return lotteries",
-            "POST /extract": "Extract lottery results (JSON response)",
-            "POST /extract/csv": "Extract lottery results (CSV download)",
-            "GET /extract": "Extract via query params (JSON response)",
-            "GET /extract/csv": "Extract via query params (CSV download)",
+            "GET /lotteries/sources": "Data source information",
+            "GET /extract": "Extract lottery results via query params (JSON response)",
+            "POST /extract": "Extract lottery results via JSON body (JSON response)",
+            "GET /extract/csv": "Extract lottery results via query params (CSV download)",
+            "POST /extract/csv": "Extract lottery results via JSON body (CSV download)",
+            "GET /api/scoreboard": "Real-time multi-state scoreboard (pick3/pick4/pick5/powerball/megamillions)",
+            "GET /api/scoreboard/games": "Available scoreboard game types and state counts",
+            "GET /health": "Liveness probe",
+            "GET /health/ready": "Readiness probe",
+            "GET /metrics": "Runtime metrics (request counts, response times, uptime)",
             "GET /docs": "Interactive API documentation (Swagger UI)",
             "GET /redoc": "Alternative API documentation",
         },
         "supported_states": len([s for s in LOTTERIES_BY_STATE.values() if s]),
+        "total_lotteries": sum(
+            len(s.get("lotteries", [])) if isinstance(s, dict) else 0
+            for s in LOTTERIES_BY_STATE.values()
+        ),
         "note": "All data is real historical lottery results from official sources",
     }
 
@@ -505,23 +520,54 @@ async def _do_extract(state_code: str, lottery_ids: List[str], from_date_str: st
     """Core extraction logic - returns JSON."""
     code = state_code.upper()
     from_dt, to_dt = _validate_dates(from_date_str, to_date_str)
+
+    # Validate state code exists
+    if code not in LOTTERIES_BY_STATE:
+        raise HTTPException(
+            status_code=404,
+            detail=f"State '{state_code}' not found. Use a valid 2-letter US state code (e.g., 'NY', 'CA', 'TX')."
+        )
+
+    state_data = LOTTERIES_BY_STATE[code]
     state_name = _get_state_name(code)
+
+    # Check if state has a lottery
+    if not state_data:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{state_name} ({code}) does not have a state lottery."
+        )
 
     if not lottery_ids:
         raise HTTPException(status_code=400, detail="At least one lottery_id is required.")
 
     # Validate lottery IDs against state
     valid_ids = []
-    if code in LOTTERIES_BY_STATE and isinstance(LOTTERIES_BY_STATE[code], dict):
-        state_lot_ids = [l["id"] for l in LOTTERIES_BY_STATE[code].get("lotteries", [])]
-        for lid in lottery_ids:
-            if lid in state_lot_ids:
+    warnings = []
+    state_lot_ids = [l["id"] for l in state_data.get("lotteries", [])] if isinstance(state_data, dict) else []
+    for lid in lottery_ids:
+        if lid in state_lot_ids:
+            valid_ids.append(lid)
+        else:
+            # Check if it's a valid lottery in ANY state (cross-state request)
+            is_known = any(
+                lid == lot["id"]
+                for st_data in LOTTERIES_BY_STATE.values()
+                if isinstance(st_data, dict)
+                for lot in st_data.get("lotteries", [])
+            )
+            if is_known:
+                warnings.append(f"Lottery '{lid}' is not listed under {code} but is a known game — fetching anyway.")
                 valid_ids.append(lid)
             else:
-                logger.warning(f"Lottery '{lid}' not in state '{code}' lotteries, attempting anyway.")
-                valid_ids.append(lid)  # Allow even if not in state list
-    else:
-        valid_ids = lottery_ids
+                warnings.append(f"Lottery '{lid}' is not a recognized lottery ID. Skipping.")
+
+    if not valid_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"None of the provided lottery_ids are valid for {state_name} ({code}). "
+                   f"Available: {[l['id'] for l in state_data.get('lotteries', [])] if isinstance(state_data, dict) else []}"
+        )
 
     # Fetch results for each lottery concurrently
     tasks = []
@@ -564,9 +610,11 @@ async def _do_extract(state_code: str, lottery_ids: List[str], from_date_str: st
         "data": csv_rows,
         "csv_filename": filename,
         "errors": errors,
+        "warnings": warnings,
         "data_sources": [
             "NY Open Data (data.ny.gov) - Official government data",
-            "lotto.net - Historical results archive",
+            "lotto.net / lottery.net - Historical results archives",
+            "lotteryusa.com - Recent draw results",
         ],
     }
 
@@ -908,42 +956,56 @@ async def get_data_sources():
     return {
         "sources": [
             {
-                "name": "NY Open Data - Powerball",
-                "url": "https://data.ny.gov/resource/d6yy-54nr.json",
-                "type": "Official Government API",
-                "coverage": "Powerball results from 2010 to present",
-                "update_frequency": "After each drawing",
-            },
-            {
-                "name": "NY Open Data - Mega Millions",
-                "url": "https://data.ny.gov/resource/5xaw-6ayf.json",
-                "type": "Official Government API",
-                "coverage": "Mega Millions results from 2002 to present",
-                "update_frequency": "After each drawing",
-            },
-            {
-                "name": "NY Open Data - NY Lotto",
-                "url": "https://data.ny.gov/resource/6nbc-h7bj.json",
-                "type": "Official Government API",
-                "coverage": "NY Lotto results",
-                "update_frequency": "After each drawing",
-            },
-            {
-                "name": "NY Open Data - Take 5",
-                "url": "https://data.ny.gov/resource/dg63-4siq.json",
-                "type": "Official Government API",
-                "coverage": "NY Take 5 results",
+                "name": "NY Open Data (data.ny.gov)",
+                "url": "https://data.ny.gov",
+                "type": "Official Government API (Socrata)",
+                "coverage": "Powerball, Mega Millions, NY Lotto, Take 5, Win 4, Numbers, Cash4Life, Pick 10",
                 "update_frequency": "After each drawing",
             },
             {
                 "name": "lotto.net",
                 "url": "https://www.lotto.net",
                 "type": "Public Historical Archive",
-                "coverage": "Multiple state and multi-state lotteries",
+                "coverage": "Powerball, Mega Millions, SuperLotto Plus, FL Lotto, TX Lotto, MI Lotto 47, WA Lotto, OR Megabucks, NJ games, IL Lotto",
                 "update_frequency": "After each drawing",
             },
+            {
+                "name": "lottery.net",
+                "url": "https://lottery.net",
+                "type": "Public Historical Archive",
+                "coverage": "All 45+ state lotteries (Pick 3/4/5, Cash5, Fantasy5, etc.) across all US states",
+                "update_frequency": "After each drawing",
+            },
+            {
+                "name": "lotteryusa.com",
+                "url": "https://lotteryusa.com",
+                "type": "Public Results Archive",
+                "coverage": "Recent ~50 draws for major state games (fallback source)",
+                "update_frequency": "After each drawing",
+            },
+            {
+                "name": "Louisiana Lottery (Official)",
+                "url": "https://louisianalottery.com",
+                "type": "Official State CSV Downloads",
+                "coverage": "LA Pick 3/4/5, Easy 5, Lotto",
+                "update_frequency": "After each drawing",
+            },
+            {
+                "name": "Kansas Lottery (Official)",
+                "url": "https://www.kslottery.com",
+                "type": "Official State Website",
+                "coverage": "KS Pick 3, Super Cash",
+                "update_frequency": "Monthly archives",
+            },
+            {
+                "name": "Kentucky Lottery (Official API)",
+                "url": "https://www.kylottery.com",
+                "type": "Official State JSON API (IGT/AWC)",
+                "coverage": "KY Pick 3/4, Cash Ball, Cash Pop",
+                "update_frequency": "Real-time after drawings",
+            },
         ],
-        "disclaimer": "All data is sourced from official or publicly verified lottery sources. No randomly generated numbers are used.",
+        "disclaimer": "All data is sourced from official or publicly verified lottery sources. No randomly generated numbers are ever used.",
     }
 
 
@@ -967,6 +1029,34 @@ def _react_index_path() -> Optional[Path]:
     if REACT_INDEX_HTML.exists():
         return REACT_INDEX_HTML
     return None
+
+@app.get("/clear", include_in_schema=False)
+async def clear_cache_page():
+    """Emergency cache-buster page — clears service workers and caches, then reloads."""
+    return HTMLResponse(
+        content="""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Clearing cache...</title>
+<style>body{background:#0a0a1e;color:#fff;font-family:sans-serif;display:flex;align-items:center;
+justify-content:center;height:100vh;margin:0;flex-direction:column}
+.spin{font-size:3rem;animation:r 1s linear infinite}@keyframes r{to{transform:rotate(360deg)}}</style>
+</head><body><div class="spin">🔄</div><h2>Clearing cache...</h2><p id="s">Removing service workers</p>
+<script>
+(async()=>{
+  const s=document.getElementById('s');
+  try{
+    if('serviceWorker' in navigator){
+      const regs=await navigator.serviceWorker.getRegistrations();
+      for(const r of regs){await r.unregister();}
+      s.textContent='Unregistered '+regs.length+' service worker(s)';
+    }
+    const keys=await caches.keys();
+    for(const k of keys){await caches.delete(k);}
+    s.textContent='Cleared '+keys.length+' cache(s). Redirecting...';
+  }catch(e){s.textContent='Error: '+e.message;}
+  setTimeout(()=>window.location.replace('/'),1500);
+})();
+</script></body></html>""",
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"},
+    )
 
 @app.get("/", include_in_schema=False)
 @app.get("/app", include_in_schema=False)
@@ -1009,7 +1099,20 @@ if FRONTEND_BUILD.exists():
         async def favicon():
             return FileResponse(str(favicon_path))
 
-    # Catch-all fallback → serve scoreboard for unknown paths
+    # PWA service worker (must be served from root scope)
+    sw_path = FRONTEND_BUILD / "sw.js"
+    if sw_path.exists():
+        @app.get("/sw.js", include_in_schema=False)
+        async def service_worker():
+            return FileResponse(str(sw_path), media_type="application/javascript",
+                                headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+    # PWA icons directory
+    icons_dir = FRONTEND_BUILD / "icons"
+    if icons_dir.exists():
+        app.mount("/icons", StaticFiles(directory=str(icons_dir)), name="icons")
+
+    # Catch-all fallback → serve React SPA for unknown frontend paths
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
         API_PREFIXES = (
@@ -1018,10 +1121,16 @@ if FRONTEND_BUILD.exists():
         )
         if any(full_path.startswith(p) for p in API_PREFIXES):
             raise HTTPException(status_code=404, detail=f"API path not found: /{full_path}")
-        # Serve scoreboard as the default page
-        sb = _scoreboard_path()
-        if sb:
-            return FileResponse(str(sb), media_type="text/html",
+        # Try scoreboard path first for scoreboard-related paths
+        if "scoreboard" in full_path:
+            sb = _scoreboard_path()
+            if sb:
+                return FileResponse(str(sb), media_type="text/html",
+                                    headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+        # Serve React SPA index.html as default for client-side routing
+        idx = _react_index_path()
+        if idx:
+            return FileResponse(str(idx), media_type="text/html",
                                 headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
         raise HTTPException(status_code=404, detail="Frontend not built")
 

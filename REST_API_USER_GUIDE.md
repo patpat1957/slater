@@ -1,80 +1,267 @@
-# 🎰 Lotto Extraction REST API — User Guide
+# Lotto Extraction REST API - User Guide
 
 **Version:** 1.1.0
-**Base URL:** `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai`
-**Interactive Docs (Swagger UI):** `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/docs`
-**Clean Docs (ReDoc):** `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/redoc`
-**OpenAPI JSON Spec:** `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/openapi.json`
+**API Spec:** `/docs` (Swagger UI) | `/redoc` (ReDoc) | `/openapi.json` (OpenAPI 3.0)
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
 1. [Overview](#1-overview)
-2. [Quick Start](#2-quick-start)
-3. [Authentication & Rate Limits](#3-authentication--rate-limits)
-4. [Endpoints Reference](#4-endpoints-reference)
+2. [Setup & Installation](#2-setup--installation)
+3. [Running the Server](#3-running-the-server)
+4. [Authentication & Rate Limits](#4-authentication--rate-limits)
+5. [API Endpoints Reference](#5-api-endpoints-reference)
+   - [Info & Health](#info--health)
    - [Lottery Discovery](#lottery-discovery)
    - [Data Extraction](#data-extraction)
-   - [Health & Monitoring](#health--monitoring)
-5. [Request & Response Examples](#5-request--response-examples)
-6. [Supported States & Lottery IDs](#6-supported-states--lottery-ids)
-7. [Response Field Reference](#7-response-field-reference)
-8. [Error Codes](#8-error-codes)
-9. [CSV Export](#9-csv-export)
-10. [Data Sources & Coverage](#10-data-sources--coverage)
-11. [All Links](#11-all-links)
+   - [Scoreboard API](#scoreboard-api)
+6. [Request & Response Examples](#6-request--response-examples)
+7. [California (CA) — Quick-Start Guide](#california-ca--quick-start-guide)
+8. [Supported States & Lottery IDs](#7-supported-states--lottery-ids)
+9. [Response Field Reference](#8-response-field-reference)
+10. [Error Handling](#9-error-handling)
+11. [CSV Export](#10-csv-export)
+12. [Data Sources & Coverage](#11-data-sources--coverage)
+13. [Production Deployment](#12-production-deployment)
+14. [Environment Variables](#13-environment-variables)
+15. [Troubleshooting](#14-troubleshooting)
 
 ---
 
 ## 1. Overview
 
-The **Lotto Extraction API** provides **real US lottery draw results** from official public sources — no simulated or random numbers. It supports:
+The **Lotto Extraction API** provides **real US lottery draw results** from official public sources. No simulated or random numbers are ever generated.
 
-- ✅ **46 US states**, 200+ lottery games
-- ✅ **Date range queries** up to 5 years
-- ✅ **JSON and CSV** output formats
-- ✅ **Multi-lottery queries** in a single request
-- ✅ **Location-based** lottery discovery by state
-- ✅ **Zero authentication** required — public API
+**Key features:**
 
----
-
-## 2. Quick Start
-
-### Step 1 — Find lotteries for your state
-
-```
-GET /lotteries/by-state/VA
-```
-
-### Step 2 — Extract draw results as JSON
-
-```
-GET /extract?state_code=VA&lottery_ids=va_cash5&from_date=2025-01-01&to_date=2025-12-31
-```
-
-### Step 3 — Download as CSV
-
-```
-GET /extract/csv?state_code=VA&lottery_ids=va_cash5&from_date=2025-01-01&to_date=2025-12-31
-```
+- **46 US states** with 280+ lottery games supported
+- **Date range queries** up to 10 years of historical data
+- **JSON and CSV** output formats
+- **Multi-lottery queries** in a single request
+- **Location-based discovery** by state code or IP geolocation
+- **Real-time scoreboard** for Pick 3/4/5, Powerball, and Mega Millions across all states
+- **7 data sources** including official government APIs, state lottery websites, and public archives
+- **Zero authentication** required - public API
+- **Production-ready** with rate limiting, security headers, metrics, and health probes
 
 ---
 
-## 3. Authentication & Rate Limits
+## 2. Setup & Installation
+
+### Prerequisites
+
+- **Python 3.9+** (tested on 3.11)
+- **pip** (Python package manager)
+- **Node.js 18+** and **npm** (for frontend build only)
+
+### Backend Setup
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd webapp
+
+# Install Python dependencies
+cd backend
+pip install -r requirements.txt
+```
+
+**Required Python packages** (installed via requirements.txt):
+
+| Package | Purpose |
+|---|---|
+| `fastapi` | Web framework |
+| `uvicorn` | ASGI server |
+| `httpx` | Async HTTP client for scraping |
+| `requests` | HTTP client (Louisiana CSV needs it) |
+| `beautifulsoup4` | HTML parsing for lottery sites |
+| `lxml` | Fast HTML/XML parser |
+| `pydantic` | Request/response validation |
+| `stripe` | Payment processing (optional) |
+
+If `requirements.txt` is missing, install manually:
+
+```bash
+pip install fastapi uvicorn httpx requests beautifulsoup4 lxml pydantic stripe
+```
+
+### Frontend Setup (Optional)
+
+The frontend is a React app for the lottery optimizer UI. It's optional for API-only use.
+
+```bash
+cd frontend
+npm install
+npm run build
+
+# Copy build output to backend static directory
+cp -r build/* ../backend/static/ 2>/dev/null || true
+```
+
+---
+
+## 3. Running the Server
+
+### Development Mode
+
+```bash
+cd backend
+
+# Start with auto-reload (development)
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+# Start without reload (production-like)
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+The API will be available at `http://localhost:8000`.
+
+### Verify the Server is Running
+
+```bash
+# Health check
+curl http://localhost:8000/health
+# Expected: {"status":"healthy","timestamp":"...","version":"1.1.0"}
+
+# Readiness check (verifies config + scrapers loaded)
+curl http://localhost:8000/health/ready
+# Expected: {"status":"ready","checks":{"lottery_config":{"status":"ok",...},...}}
+
+# API info
+curl http://localhost:8000/api/info
+```
+
+### Production Mode (with Gunicorn)
+
+```bash
+pip install gunicorn
+
+# Run with multiple workers
+gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:8000 \
+  --timeout 120 \
+  --access-logfile -
+```
+
+### Using PM2 (Node.js process manager)
+
+```bash
+npm install -g pm2
+
+# Create ecosystem config
+cat > ecosystem.config.js << 'EOF'
+module.exports = {
+  apps: [{
+    name: "lotto-api",
+    script: "uvicorn",
+    args: "main:app --host 0.0.0.0 --port 8000",
+    cwd: "./backend",
+    interpreter: "none",
+    env: {
+      ALLOWED_ORIGINS: "https://yourdomain.com",
+      RATE_LIMIT_REQUESTS: "60",
+      RATE_LIMIT_WINDOW: "60"
+    }
+  }]
+};
+EOF
+
+pm2 start ecosystem.config.js
+pm2 status
+pm2 logs lotto-api
+```
+
+---
+
+## 4. Authentication & Rate Limits
 
 | Setting | Value |
 |---|---|
 | Authentication | None required (public API) |
 | Rate limit | **60 requests per 60 seconds per IP** |
-| Exceeded limit response | HTTP `429 Too Many Requests` + `Retry-After` header |
-| Max date range per request | **5 years (1,825 days)** |
+| Rate limit response | HTTP `429 Too Many Requests` + `Retry-After: 60` header |
+| Max date range per request | **10 years (3,653 days)** |
 | Future dates | Automatically capped to today |
+| CORS | Configurable via `ALLOWED_ORIGINS` env var (defaults to `*`) |
 
 ---
 
-## 4. Endpoints Reference
+## 5. API Endpoints Reference
+
+### Info & Health
+
+---
+
+#### `GET /api/info`
+
+Returns API metadata, version, supported data sources, and full endpoint listing.
+
+```bash
+curl http://localhost:8000/api/info
+```
+
+**Response:**
+```json
+{
+  "name": "Lotto Extraction API",
+  "version": "1.1.0",
+  "endpoints": { "GET /extract": "...", "POST /extract": "...", ... },
+  "supported_states": 46,
+  "total_lotteries": 281
+}
+```
+
+---
+
+#### `GET /health`
+
+Liveness probe. Returns 200 if the process is alive.
+
+```bash
+curl http://localhost:8000/health
+```
+
+---
+
+#### `GET /health/ready`
+
+Readiness probe. Returns 200 if lottery config and scrapers are loaded. Returns 503 if not ready.
+
+```bash
+curl http://localhost:8000/health/ready
+```
+
+---
+
+#### `GET /metrics`
+
+Runtime performance metrics: request counts, error rates, response times, uptime.
+
+```bash
+curl http://localhost:8000/metrics
+```
+
+**Response:**
+```json
+{
+  "version": "1.1.0",
+  "uptime_seconds": 86400,
+  "requests": {
+    "total": 1500,
+    "success": 1420,
+    "error": 80,
+    "4xx": 75,
+    "5xx": 5,
+    "success_rate_pct": 94.7
+  },
+  "records_served": 125000,
+  "response_time_ms": { "avg": 850, "p95": 3200, "p99": 8500 },
+  "rate_limit": { "requests_per_window": 60, "window_seconds": 60 }
+}
+```
+
+---
 
 ### Lottery Discovery
 
@@ -82,22 +269,31 @@ GET /extract/csv?state_code=VA&lottery_ids=va_cash5&from_date=2025-01-01&to_date
 
 #### `GET /lotteries/all-states`
 
-Returns all 50 US states and their available lottery games.
+Returns all 51 US states/territories with their available lottery games.
 
-**No parameters required.**
+```bash
+curl http://localhost:8000/lotteries/all-states
+```
 
-**Response example:**
+**Response:**
 ```json
 {
-  "total_states": 50,
-  "states_with_lotteries": 46,
+  "total_states": 51,
+  "states_with_lottery": 46,
   "states": [
     {
       "state_code": "VA",
       "state_name": "Virginia",
       "lottery_count": 8,
-      "lotteries": [...]
-    }
+      "lotteries": [
+        { "id": "powerball",    "name": "Powerball",    "type": "multistate" },
+        { "id": "mega_millions","name": "Mega Millions","type": "multistate" },
+        { "id": "va_cash5",     "name": "Cash 5",       "type": "state" },
+        { "id": "va_pick3",     "name": "Pick 3 Night", "type": "state" },
+        ...
+      ]
+    },
+    ...
   ]
 }
 ```
@@ -108,51 +304,67 @@ Returns all 50 US states and their available lottery games.
 
 Returns all lottery games available in a specific state.
 
-**Path parameter:**
-
 | Parameter | Type | Required | Example |
 |---|---|---|---|
-| `state_code` | string | ✅ Yes | `VA`, `NY`, `CA`, `FL` |
+| `state_code` | path string | Yes | `VA`, `NY`, `CA`, `FL` |
 
-> **Note:** State code must be 2-letter uppercase (e.g. `VA` not `va`).
+> State codes are case-insensitive (`va` and `VA` both work).
 
-**Response example:**
+```bash
+curl http://localhost:8000/lotteries/by-state/VA
+```
+
+**Response:**
 ```json
 {
   "state_code": "VA",
   "state_name": "Virginia",
   "lottery_count": 8,
   "lotteries": [
-    { "id": "va_cash5",     "name": "Cash 5",        "type": "state" },
-    { "id": "va_pick3",     "name": "Pick 3 Night",   "type": "state" },
-    { "id": "va_pick3_day", "name": "Pick 3 Day",     "type": "state" },
-    { "id": "va_pick4",     "name": "Pick 4 Night",   "type": "state" },
-    { "id": "va_pick4_day", "name": "Pick 4 Day",     "type": "state" },
-    { "id": "va_cash4life", "name": "Cash4Life",      "type": "multistate" },
-    { "id": "powerball",    "name": "Powerball",      "type": "multistate" },
-    { "id": "mega_millions","name": "Mega Millions",  "type": "multistate" }
+    { "id": "va_cash5",     "name": "Cash 5",       "type": "state" },
+    { "id": "va_pick3",     "name": "Pick 3 Night", "type": "state" },
+    { "id": "va_pick3_day", "name": "Pick 3 Day",   "type": "state" },
+    { "id": "va_pick4",     "name": "Pick 4 Night", "type": "state" },
+    { "id": "va_pick4_day", "name": "Pick 4 Day",   "type": "state" },
+    { "id": "va_cash4life", "name": "Cash4Life",    "type": "multistate" },
+    { "id": "powerball",    "name": "Powerball",    "type": "multistate" },
+    { "id": "mega_millions","name": "Mega Millions","type": "multistate" }
   ]
 }
 ```
+
+**Error responses:**
+- `404` - State code not found (e.g., `ZZ`)
+- For states without lotteries (AL, AK, HI, NV, UT), returns `lotteries: []` with a message
 
 ---
 
 #### `GET /lotteries/detect-location`
 
-Auto-detects your US state from your IP address and returns local lotteries.
-
-**Query parameters (all optional):**
+Auto-detect state from IP address and return available lotteries.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `ip` | string | No | IP address to look up (auto-detected if omitted) |
-| `state_code` | string | No | Override with a known state code |
+| `ip` | query string | No | IP address for geolocation (auto-detected if omitted) |
+| `state_code` | query string | No | Override with a known state code |
+
+```bash
+# Auto-detect from IP
+curl http://localhost:8000/lotteries/detect-location
+
+# Override with known state
+curl "http://localhost:8000/lotteries/detect-location?state_code=VA"
+```
 
 ---
 
 #### `GET /lotteries/sources`
 
-Returns details about all data sources used by the API, including URLs and disclaimers.
+Returns detailed information about all data sources used by the API.
+
+```bash
+curl http://localhost:8000/lotteries/sources
+```
 
 ---
 
@@ -162,217 +374,71 @@ Returns details about all data sources used by the API, including URLs and discl
 
 #### `GET /extract`
 
-Retrieve lottery draw results as **JSON**.
-
-**Query parameters:**
+Retrieve lottery draw results as JSON via query parameters.
 
 | Parameter | Type | Required | Description | Example |
 |---|---|---|---|---|
-| `state_code` | string | ✅ Yes | Two-letter US state code | `VA` |
-| `lottery_ids` | string | ✅ Yes | Comma-separated lottery IDs | `va_cash5,va_pick3` |
-| `from_date` | string | ✅ Yes | Start date in `YYYY-MM-DD` format | `2025-01-01` |
-| `to_date` | string | ✅ Yes | End date in `YYYY-MM-DD` format | `2025-12-31` |
+| `state_code` | string | Yes | 2-letter US state code | `VA` |
+| `lottery_ids` | string | Yes | Comma-separated lottery IDs | `va_cash5,va_pick3` |
+| `from_date` | string | Yes | Start date `YYYY-MM-DD` | `2025-01-01` |
+| `to_date` | string | Yes | End date `YYYY-MM-DD` | `2025-12-31` |
 
-**Example request:**
-```
-GET /extract?state_code=VA&lottery_ids=va_cash5,va_pick3&from_date=2025-12-29&to_date=2025-12-31
+```bash
+curl "http://localhost:8000/extract?state_code=VA&lottery_ids=va_cash5&from_date=2025-05-01&to_date=2025-05-26"
 ```
 
-**Example response:**
+**Response:**
 ```json
 {
   "state_code": "VA",
   "state_name": "Virginia",
   "lotteries": ["Cash 5"],
-  "from_date": "2025-12-29",
-  "to_date": "2025-12-31",
-  "total_records": 3,
+  "from_date": "2025-05-01",
+  "to_date": "2025-05-26",
+  "total_records": 26,
   "data": [
     {
-      "Date": "2025-12-31",
+      "Date": "2025-05-26",
       "Lotto_Name": "Cash 5",
       "State": "Virginia",
       "Lottery_ID": "va_cash5",
-      "Ball_1": "12",
-      "Ball_2": "20",
-      "Ball_3": "37",
-      "Ball_4": "40",
-      "Ball_5": "44"
+      "Ball_1": "04",
+      "Ball_2": "05",
+      "Ball_3": "25",
+      "Ball_4": "28",
+      "Ball_5": "36"
     },
-    {
-      "Date": "2025-12-30",
-      "Lotto_Name": "Cash 5",
-      "State": "Virginia",
-      "Lottery_ID": "va_cash5",
-      "Ball_1": "07",
-      "Ball_2": "12",
-      "Ball_3": "20",
-      "Ball_4": "31",
-      "Ball_5": "33"
-    },
-    {
-      "Date": "2025-12-29",
-      "Lotto_Name": "Cash 5",
-      "State": "Virginia",
-      "Lottery_ID": "va_cash5",
-      "Ball_1": "14",
-      "Ball_2": "19",
-      "Ball_3": "20",
-      "Ball_4": "44",
-      "Ball_5": "45"
-    }
+    ...
   ],
-  "csv_filename": "Virginia_Cash_5_20251229_20251231.csv",
+  "csv_filename": "Virginia_Cash_5_20250501_20250526.csv",
   "errors": [],
+  "warnings": [],
   "data_sources": [
     "NY Open Data (data.ny.gov) - Official government data",
-    "lotto.net - Historical results archive"
+    "lotto.net / lottery.net - Historical results archives",
+    "lotteryusa.com - Recent draw results"
   ]
 }
 ```
+
+**Validation rules:**
+- `state_code` must be a valid 2-letter US state code
+- States without lotteries (AL, AK, HI, NV, UT) return `400`
+- Unknown `state_code` returns `404`
+- Unknown `lottery_ids` are skipped with a warning
+- Cross-state lottery requests are allowed with a warning (e.g., requesting `va_cash5` under `CA`)
+- `from_date` must be before `to_date`
+- Maximum date range: 10 years per request
+- Future dates are automatically capped to today
 
 ---
 
 #### `POST /extract`
 
-Same as `GET /extract` but accepts a **JSON request body** — ideal when selecting many lottery IDs or when using tools that prefer POST requests.
+Same as `GET /extract` but accepts a JSON request body.
 
-**Request body:**
-```json
-{
-  "state_code": "NY",
-  "lottery_ids": ["powerball", "mega_millions", "ny_take5"],
-  "from_date": "2025-01-01",
-  "to_date": "2025-12-31"
-}
-```
-
-**Response:** Same format as `GET /extract`.
-
----
-
-#### `GET /extract/csv`
-
-Same parameters as `GET /extract` but returns a **downloadable CSV file**.
-
-**Query parameters:** Same as `GET /extract`.
-
-**Response headers:**
-```
-Content-Type: text/csv
-Content-Disposition: attachment; filename="Virginia_Cash_5_20251229_20251231.csv"
-```
-
-**CSV format example:**
-```
-Date,Lotto_Name,State,Lottery_ID,Ball_1,Ball_2,Ball_3,Ball_4,Ball_5
-2025-12-31,Cash 5,Virginia,va_cash5,12,20,37,40,44
-2025-12-30,Cash 5,Virginia,va_cash5,07,12,20,31,33
-2025-12-29,Cash 5,Virginia,va_cash5,14,19,20,44,45
-```
-
----
-
-#### `POST /extract/csv`
-
-Same as `GET /extract/csv` but accepts a **JSON request body**.
-
-**Request body:** Same format as `POST /extract`.
-
-**Response:** Downloadable CSV file.
-
----
-
-### Health & Monitoring
-
----
-
-#### `GET /health`
-
-Liveness check — confirms the API process is running.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "version": "1.1.0",
-  "timestamp": "2026-03-06T12:00:00.000000"
-}
-```
-
----
-
-#### `GET /health/ready`
-
-Readiness check — confirms lottery configuration and scrapers are fully loaded and ready to serve requests.
-
-**Response:**
-```json
-{
-  "status": "ready",
-  "checks": {
-    "lottery_config": "ok",
-    "scrapers": "ok"
-  }
-}
-```
-
----
-
-#### `GET /metrics`
-
-Runtime performance metrics for monitoring and observability.
-
-**Response:**
-```json
-{
-  "version": "1.1.0",
-  "uptime_seconds": 890643,
-  "start_time": "2026-02-23T22:53:13.711291",
-  "requests": {
-    "total": 359,
-    "success": 324,
-    "error": 35,
-    "4xx": 35,
-    "5xx": 0,
-    "success_rate_pct": 90.3
-  },
-  "records_served": 66477,
-  "response_time_ms": {
-    "avg": 1422,
-    "p95": 6301,
-    "p99": 14221
-  },
-  "rate_limit": {
-    "requests_per_window": 60,
-    "window_seconds": 60
-  }
-}
-```
-
----
-
-#### `GET /api/info`
-
-Returns API name, version, description, and full list of available endpoints.
-
----
-
-## 5. Request & Response Examples
-
-### curl — Get VA lottery IDs
 ```bash
-curl https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/lotteries/by-state/VA
-```
-
-### curl — Extract NY Powerball for all of 2025
-```bash
-curl "https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/extract?state_code=NY&lottery_ids=powerball&from_date=2025-01-01&to_date=2025-12-31"
-```
-
-### curl — POST multiple lotteries
-```bash
-curl -X POST https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/extract \
+curl -X POST http://localhost:8000/extract \
   -H "Content-Type: application/json" \
   -d '{
     "state_code": "NY",
@@ -382,157 +448,608 @@ curl -X POST https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/extra
   }'
 ```
 
-### curl — Download CSV file
+---
+
+#### `GET /extract/csv`
+
+Same parameters as `GET /extract` but returns a downloadable CSV file.
+
 ```bash
-curl -O -J "https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/extract/csv?state_code=VA&lottery_ids=va_cash5&from_date=2025-01-01&to_date=2025-12-31"
+curl -O -J "http://localhost:8000/extract/csv?state_code=VA&lottery_ids=va_cash5&from_date=2025-01-01&to_date=2025-12-31"
 ```
 
-### Python — Extract and parse results
+**Response headers:**
+```
+Content-Type: text/csv
+Content-Disposition: attachment; filename="Virginia_Cash_5_20250101_20251231.csv"
+X-Total-Records: 365
+X-State: Virginia
+X-Lotteries: Cash 5
+X-From-Date: 2025-01-01
+X-To-Date: 2025-12-31
+```
+
+---
+
+#### `POST /extract/csv`
+
+Same as `GET /extract/csv` but accepts a JSON request body.
+
+---
+
+### Scoreboard API
+
+The Scoreboard API provides real-time multi-state results for pick games, Powerball, and Mega Millions. Results are cached for 5 minutes to avoid hammering upstream sources.
+
+---
+
+#### `GET /api/scoreboard`
+
+Returns the latest draw results for all participating states for a given game type.
+
+| Parameter | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `game` | string | No | `pick3` | Game type: `pick3`, `pick4`, `pick5`, `powerball`, `megamillions` |
+| `draw` | string | No | `evening` | Draw time: `evening`, `midday`, `night` |
+| `target_date` | string | No | today | Target date `YYYY-MM-DD` |
+
+```bash
+# Get Pick 3 evening results for all states
+curl "http://localhost:8000/api/scoreboard?game=pick3&draw=evening"
+
+# Get Powerball results
+curl "http://localhost:8000/api/scoreboard?game=powerball&draw=evening"
+
+# Get Pick 4 midday results for a specific date
+curl "http://localhost:8000/api/scoreboard?game=pick4&draw=midday&target_date=2025-05-20"
+```
+
+**Response:**
+```json
+{
+  "game": "pick3",
+  "draw": "evening",
+  "target_date": "2025-05-26",
+  "fetched_at": "2025-05-26T23:45:00.000000",
+  "entries": [
+    {
+      "state": "VA",
+      "lottery_id": "va_pick3",
+      "lottery_name": "Pick 3 Night",
+      "date": "2025-05-26",
+      "balls": ["3", "7", "9"],
+      "extra": "2",
+      "status": "confirmed"
+    },
+    {
+      "state": "NY",
+      "lottery_id": "ny_numbers",
+      "lottery_name": "Numbers",
+      "date": "2025-05-26",
+      "balls": ["1", "4", "8"],
+      "extra": "",
+      "status": "confirmed"
+    },
+    ...
+  ],
+  "total_states": 25,
+  "errors": [],
+  "cache_ttl_seconds": 300
+}
+```
+
+**Scoreboard game coverage:**
+
+| Game | States | Draw Types |
+|---|---|---|
+| `pick3` | 25 states | evening, midday, night |
+| `pick4` | 19 states | evening, midday, night |
+| `pick5` | 5 states | evening, midday |
+| `powerball` | 1 (US) | evening |
+| `megamillions` | 1 (US) | evening |
+
+---
+
+#### `GET /api/scoreboard/games`
+
+Returns available scoreboard game types with their state counts and draw types.
+
+```bash
+curl http://localhost:8000/api/scoreboard/games
+```
+
+**Response:**
+```json
+{
+  "games": {
+    "pick3":       { "states": 25, "draws": ["evening", "midday", "night"] },
+    "pick4":       { "states": 19, "draws": ["evening", "midday", "night"] },
+    "pick5":       { "states": 5,  "draws": ["evening", "midday"] },
+    "powerball":   { "states": 1,  "draws": ["evening"] },
+    "megamillions":{ "states": 1,  "draws": ["evening"] }
+  }
+}
+```
+
+---
+
+## 6. Request & Response Examples
+
+### curl - Get Virginia lottery IDs
+
+```bash
+curl http://localhost:8000/lotteries/by-state/VA
+```
+
+### curl - Extract Powerball results
+
+```bash
+curl "http://localhost:8000/extract?state_code=NY&lottery_ids=powerball&from_date=2025-01-01&to_date=2025-12-31"
+```
+
+### curl - POST multiple lotteries
+
+```bash
+curl -X POST http://localhost:8000/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state_code": "NY",
+    "lottery_ids": ["powerball", "mega_millions", "ny_take5"],
+    "from_date": "2025-01-01",
+    "to_date": "2025-12-31"
+  }'
+```
+
+### curl - Download CSV
+
+```bash
+curl -O -J "http://localhost:8000/extract/csv?state_code=VA&lottery_ids=va_cash5&from_date=2025-01-01&to_date=2025-12-31"
+```
+
+### Python - Extract and process results
+
 ```python
 import requests
 
-BASE_URL = "https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai"
+BASE_URL = "http://localhost:8000"  # Change to your production URL
 
-# Step 1: Get lottery IDs for Virginia
+# Step 1: Discover lotteries for Virginia
 resp = requests.get(f"{BASE_URL}/lotteries/by-state/VA")
 lotteries = resp.json()["lotteries"]
-lottery_ids = [l["id"] for l in lotteries]
-print("VA lottery IDs:", lottery_ids)
+print(f"Virginia has {len(lotteries)} lotteries:")
+for lot in lotteries:
+    print(f"  {lot['id']:20s} - {lot['name']} ({lot['type']})")
 
 # Step 2: Extract draw results
 resp = requests.post(f"{BASE_URL}/extract", json={
     "state_code": "VA",
     "lottery_ids": ["va_cash5", "va_pick3"],
-    "from_date": "2025-12-01",
-    "to_date": "2025-12-31"
+    "from_date": "2025-05-01",
+    "to_date": "2025-05-26"
 })
 data = resp.json()
-print(f"Total records: {data['total_records']}")
-for row in data["data"]:
-    print(row)
+print(f"\nTotal records: {data['total_records']}")
+print(f"Warnings: {data['warnings']}")
+for row in data["data"][:5]:
+    balls = [row.get(f"Ball_{i}", "") for i in range(1, 6)]
+    print(f"  {row['Date']} {row['Lotto_Name']:15s} -> {' '.join(balls)}")
+
+# Step 3: Download CSV
+resp = requests.get(f"{BASE_URL}/extract/csv", params={
+    "state_code": "VA",
+    "lottery_ids": "va_cash5",
+    "from_date": "2025-01-01",
+    "to_date": "2025-12-31"
+})
+filename = resp.headers.get("Content-Disposition", "").split("filename=")[-1].strip('"')
+with open(filename or "results.csv", "wb") as f:
+    f.write(resp.content)
+print(f"\nSaved CSV: {filename}")
 ```
 
-### JavaScript (fetch) — Extract results
-```javascript
-const BASE_URL = "https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai";
+### JavaScript (fetch) - Extract results
 
+```javascript
+const BASE_URL = "http://localhost:8000"; // Change to your production URL
+
+// Discover lotteries
+const stateResp = await fetch(`${BASE_URL}/lotteries/by-state/VA`);
+const stateData = await stateResp.json();
+console.log(`Virginia lotteries: ${stateData.lottery_count}`);
+
+// Extract results
 const response = await fetch(`${BASE_URL}/extract`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
     state_code: "VA",
     lottery_ids: ["va_cash5", "va_pick3"],
-    from_date: "2025-12-01",
-    to_date: "2025-12-31"
+    from_date: "2025-05-01",
+    to_date: "2025-05-26"
   })
 });
-
 const data = await response.json();
 console.log(`Total records: ${data.total_records}`);
-data.data.forEach(row => console.log(row));
+data.data.forEach(row => {
+  const balls = [1,2,3,4,5].map(i => row[`Ball_${i}`] || "").join(" ");
+  console.log(`${row.Date} ${row.Lotto_Name} -> ${balls}`);
+});
+```
+
+### Scoreboard - Get Pick 3 results for all states
+
+```bash
+# Evening draw
+curl "http://localhost:8000/api/scoreboard?game=pick3&draw=evening"
+
+# Midday draw
+curl "http://localhost:8000/api/scoreboard?game=pick3&draw=midday"
+
+# Specific date
+curl "http://localhost:8000/api/scoreboard?game=pick3&draw=evening&target_date=2025-05-20"
 ```
 
 ---
 
-## 6. Supported States & Lottery IDs
+## California (CA) — Quick-Start Guide
 
-> 💡 **Always call `GET /lotteries/by-state/{state_code}` to get exact IDs for your state — IDs are case-sensitive.**
+California has **7 lottery games** available through the API. This section shows you exactly how to discover, extract, and download CA lottery data.
 
-| State | Code | Lottery IDs |
-|---|---|---|
-| **New York** | `NY` | `powerball`, `mega_millions`, `ny_lotto`, `ny_numbers`, `ny_win4`, `ny_take5`, `ny_cash4life`, `ny_pick10` |
-| **Virginia** | `VA` | `powerball`, `mega_millions`, `va_cash5`, `va_pick3`, `va_pick3_day`, `va_pick4`, `va_pick4_day`, `va_cash4life` |
-| **California** | `CA` | `powerball`, `mega_millions`, `ca_superlotto_plus`, `ca_fantasy5`, `ca_daily4`, `ca_daily3`, `ca_midday3` |
-| **Florida** | `FL` | `powerball`, `mega_millions`, `fl_lotto`, `fl_fantasy5`, `fl_pick3`, `fl_pick3_midday`, `fl_pick4`, `fl_pick4_midday`, `fl_pick5`, `fl_pick5_midday`, `fl_cash4life` |
-| **Arizona** | `AZ` | `powerball`, `mega_millions`, `az_pick3`, `az_fantasy5` |
-| **Texas** | `TX` | `powerball`, `mega_millions`, `tx_lotto_texas` + more |
-| **New Jersey** | `NJ` | `powerball`, `mega_millions`, `nj_pick6`, `nj_jersey_cash5` + more |
-| **Illinois** | `IL` | `powerball`, `mega_millions`, `il_lotto` + more |
-| **Pennsylvania** | `PA` | `powerball`, `mega_millions` + 7 more (9 total) |
-| **Ohio** | `OH` | `powerball`, `mega_millions` + 5 more (7 total) |
-| **Michigan** | `MI` | `powerball`, `mega_millions` + 5 more (7 total) |
-| **Maryland** | `MD` | `powerball`, `mega_millions` + 5 more (7 total) |
-| **Louisiana** | `LA` | `powerball`, `mega_millions` + 5 more (7 total) |
-| **Georgia** | `GA` | `powerball`, `mega_millions` + 4 more (6 total) |
-| **Connecticut** | `CT` | `powerball`, `mega_millions` + 4 more (6 total) |
-| **Indiana** | `IN` | `powerball`, `mega_millions` + 4 more (6 total) |
-| **Washington** | `WA` | `powerball`, `mega_millions` + 4 more (6 total) |
-| **Wisconsin** | `WI` | `powerball`, `mega_millions` + 4 more (6 total) |
-| **Tennessee** | `TN` | `powerball`, `mega_millions` + 4 more (6 total) |
-| **North Carolina** | `NC` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Colorado** | `CO` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Kentucky** | `KY` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Massachusetts** | `MA` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Maine** | `ME` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Minnesota** | `MN` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Missouri** | `MO` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **New Hampshire** | `NH` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Oregon** | `OR` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **South Carolina** | `SC` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Vermont** | `VT` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **West Virginia** | `WV` | `powerball`, `mega_millions` + 3 more (5 total) |
-| **Arkansas** | `AR` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Delaware** | `DE` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Iowa** | `IA` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Idaho** | `ID` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Kansas** | `KS` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Mississippi** | `MS` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Nebraska** | `NE` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **New Mexico** | `NM` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Oklahoma** | `OK` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Rhode Island** | `RI` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **South Dakota** | `SD` | `powerball`, `mega_millions` + 2 more (4 total) |
-| **Washington D.C.** | `DC` | `powerball`, `mega_millions` + 1 more (3 total) |
-| **Montana** | `MT` | `powerball`, `mega_millions` + 1 more (3 total) |
-| **North Dakota** | `ND` | `powerball`, `mega_millions` + 1 more (3 total) |
-| **Wyoming** | `WY` | `powerball`, `mega_millions` + 1 more (3 total) |
+### Step 1: Discover CA Lottery Games
+
+```bash
+curl http://localhost:8000/lotteries/by-state/CA
+```
+
+**Response:**
+```json
+{
+  "state_code": "CA",
+  "state_name": "California",
+  "lotteries": [
+    { "id": "powerball",          "name": "Powerball",          "type": "multistate" },
+    { "id": "mega_millions",      "name": "Mega Millions",      "type": "multistate" },
+    { "id": "ca_superlotto_plus", "name": "SuperLotto Plus",     "type": "state" },
+    { "id": "ca_fantasy5",        "name": "Fantasy 5",           "type": "state" },
+    { "id": "ca_daily4",          "name": "Daily 4",             "type": "state" },
+    { "id": "ca_daily3",          "name": "Daily 3 Evening",     "type": "state" },
+    { "id": "ca_midday3",         "name": "Daily 3 Midday",      "type": "state" }
+  ],
+  "lottery_count": 7
+}
+```
+
+### Step 2: Extract Results (JSON)
+
+#### Single game — Powerball
+
+```bash
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=powerball&from_date=2025-05-01&to_date=2025-05-27"
+```
+
+#### Single game — SuperLotto Plus (CA-only game)
+
+```bash
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=ca_superlotto_plus&from_date=2025-05-01&to_date=2025-05-27"
+```
+
+#### Multiple games in one request
+
+```bash
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=powerball,mega_millions,ca_superlotto_plus,ca_fantasy5&from_date=2025-05-01&to_date=2025-05-27"
+```
+
+#### All 7 CA games at once
+
+```bash
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=powerball,mega_millions,ca_superlotto_plus,ca_fantasy5,ca_daily4,ca_daily3,ca_midday3&from_date=2025-05-01&to_date=2025-05-27"
+```
+
+#### POST method (JSON body)
+
+```bash
+curl -X POST http://localhost:8000/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state_code": "CA",
+    "lottery_ids": ["powerball", "mega_millions", "ca_superlotto_plus", "ca_fantasy5", "ca_daily4", "ca_daily3", "ca_midday3"],
+    "from_date": "2025-01-01",
+    "to_date": "2025-05-27"
+  }'
+```
+
+### Step 3: Download CSV
+
+```bash
+# Single game CSV
+curl -O -J "http://localhost:8000/extract/csv?state_code=CA&lottery_ids=ca_fantasy5&from_date=2025-01-01&to_date=2025-05-27"
+
+# Multiple games CSV
+curl -O -J "http://localhost:8000/extract/csv?state_code=CA&lottery_ids=powerball,ca_superlotto_plus,ca_fantasy5&from_date=2025-01-01&to_date=2025-05-27"
+```
+
+Downloaded files are named automatically:
+- `California_Fantasy_5_20250101_20250527.csv`
+- `California_Powerball_SuperLotto_Plus_Fantasy_5_20250101_20250527.csv`
+
+### CA Game Reference — Lottery IDs & Response Fields
+
+| Game | Lottery ID | Ball Columns | Bonus Columns | Type |
+|------|-----------|-------------|--------------|------|
+| **Powerball** | `powerball` | `Ball_1`–`Ball_5` | `Powerball`, `Power_Play` | multistate |
+| **Mega Millions** | `mega_millions` | `Ball_1`–`Ball_5` | `Mega_Ball`, `Megaplier` | multistate |
+| **SuperLotto Plus** | `ca_superlotto_plus` | `Ball_1`–`Ball_5` | `Mega` | state |
+| **Fantasy 5** | `ca_fantasy5` | `Ball_1`–`Ball_5` | — | state |
+| **Daily 4** | `ca_daily4` | `Ball_1`–`Ball_4` | — | state (Pick 4) |
+| **Daily 3 Evening** | `ca_daily3` | `Ball_1`–`Ball_3` | — | state (Pick 3) |
+| **Daily 3 Midday** | `ca_midday3` | `Ball_1`–`Ball_3` | — | state (Pick 3) |
+
+> **Number formatting:**
+> - **Powerball / Mega Millions / SuperLotto Plus / Fantasy 5**: Zero-padded 2-digit (`"07"`, `"42"`)
+> - **Daily 3 / Daily 4**: Single digit (`"0"`–`"9"`)
+
+### Python Example — Full CA Workflow
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8000"  # Change to your production URL
+
+# 1. Discover CA games
+resp = requests.get(f"{BASE_URL}/lotteries/by-state/CA")
+ca = resp.json()
+print(f"California has {ca['lottery_count']} games:")
+for g in ca["lotteries"]:
+    print(f"  {g['id']:25s} {g['name']:25s} ({g['type']})")
+
+# 2. Extract SuperLotto Plus results (CA-only game)
+resp = requests.post(f"{BASE_URL}/extract", json={
+    "state_code": "CA",
+    "lottery_ids": ["ca_superlotto_plus"],
+    "from_date": "2025-05-01",
+    "to_date": "2025-05-27"
+})
+data = resp.json()
+print(f"\n{data['state_name']} — {data['lotteries'][0]}")
+print(f"Total draws: {data['total_records']}")
+for row in data["data"][:5]:
+    balls = " ".join(row.get(f"Ball_{i}", "") for i in range(1, 6))
+    mega = row.get("Mega", "")
+    print(f"  {row['Date']}  {balls}  Mega={mega}")
+
+# 3. Extract ALL CA games for a month
+resp = requests.post(f"{BASE_URL}/extract", json={
+    "state_code": "CA",
+    "lottery_ids": [
+        "powerball", "mega_millions", "ca_superlotto_plus",
+        "ca_fantasy5", "ca_daily4", "ca_daily3", "ca_midday3"
+    ],
+    "from_date": "2025-05-01",
+    "to_date": "2025-05-27"
+})
+data = resp.json()
+print(f"\nAll CA games: {data['total_records']} total records")
+print(f"Games returned: {data['lotteries']}")
+
+# 4. Download CSV
+resp = requests.get(f"{BASE_URL}/extract/csv", params={
+    "state_code": "CA",
+    "lottery_ids": "ca_fantasy5",
+    "from_date": "2025-01-01",
+    "to_date": "2025-05-27"
+})
+fname = resp.headers.get("Content-Disposition", "").split("filename=")[-1].strip('"')
+with open(fname or "ca_results.csv", "wb") as f:
+    f.write(resp.content)
+print(f"\nSaved: {fname} ({resp.headers.get('X-Total-Records')} records)")
+```
+
+### JavaScript Example — CA Extraction
+
+```javascript
+const BASE_URL = "http://localhost:8000"; // Change to your production URL
+
+// Discover CA games
+const disco = await fetch(`${BASE_URL}/lotteries/by-state/CA`);
+const ca = await disco.json();
+console.log(`California: ${ca.lottery_count} games`);
+ca.lotteries.forEach(g => console.log(`  ${g.id} — ${g.name} (${g.type})`));
+
+// Extract SuperLotto Plus + Fantasy 5
+const resp = await fetch(`${BASE_URL}/extract`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    state_code: "CA",
+    lottery_ids: ["ca_superlotto_plus", "ca_fantasy5"],
+    from_date: "2025-05-01",
+    to_date: "2025-05-27"
+  })
+});
+const data = await resp.json();
+console.log(`Total records: ${data.total_records}`);
+data.data.forEach(row => {
+  const balls = [1,2,3,4,5].map(i => row[`Ball_${i}`] || "").filter(Boolean).join(" ");
+  const bonus = row.Mega ? ` Mega=${row.Mega}` : "";
+  console.log(`${row.Date} ${row.Lotto_Name.padEnd(18)} ${balls}${bonus}`);
+});
+```
+
+### Common CA Queries
+
+```bash
+# Recent Powerball draws (last 30 days)
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=powerball&from_date=2025-04-27&to_date=2025-05-27"
+
+# Full year of SuperLotto Plus
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=ca_superlotto_plus&from_date=2025-01-01&to_date=2025-12-31"
+
+# Daily 3 Evening + Midday together
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=ca_daily3,ca_midday3&from_date=2025-05-01&to_date=2025-05-27"
+
+# Historical data (up to 10 years back)
+curl "http://localhost:8000/extract?state_code=CA&lottery_ids=powerball&from_date=2016-01-01&to_date=2025-12-31"
+
+# CSV download — all CA games for 2025
+curl -O -J "http://localhost:8000/extract/csv?state_code=CA&lottery_ids=powerball,mega_millions,ca_superlotto_plus,ca_fantasy5,ca_daily4,ca_daily3,ca_midday3&from_date=2025-01-01&to_date=2025-12-31"
+```
 
 ---
 
-## 7. Response Field Reference
+## 7. Supported States & Lottery IDs
 
-### JSON Extract Response Fields
+> Use `GET /lotteries/by-state/{state_code}` to get exact IDs for any state.
+
+**States without lotteries:** Alabama (AL), Alaska (AK), Hawaii (HI), Nevada (NV), Utah (UT)
+
+| State | Code | Games | Key Lottery IDs |
+|---|---|---|---|
+| **Arizona** | `AZ` | 4 | `powerball`, `mega_millions`, `az_fantasy5`, `az_pick3` |
+| **Arkansas** | `AR` | 5 | `powerball`, `mega_millions`, `ar_natural_state_jackpot`, `ar_cash3`, `ar_cash3_midday` |
+| **California** | `CA` | 7 | `powerball`, `mega_millions`, `ca_superlotto_plus`, `ca_fantasy5`, `ca_daily4`, `ca_daily3`, `ca_midday3` |
+| **Colorado** | `CO` | 5 | `powerball`, `mega_millions`, `co_lotto`, `co_cash5`, `co_pick3` |
+| **Connecticut** | `CT` | 6 | `powerball`, `mega_millions`, `ct_lotto`, `ct_cash5`, `ct_play3`, `ct_play4` |
+| **Delaware** | `DE` | 9 | `powerball`, `mega_millions`, `de_play3_day`, `de_play3_night`, `de_multi_win`, ... |
+| **Florida** | `FL` | 11 | `powerball`, `mega_millions`, `fl_lotto`, `fl_fantasy5`, `fl_pick3`, `fl_cash4life`, ... |
+| **Georgia** | `GA` | 12 | `powerball`, `mega_millions`, `ga_fantasy5`, `ga_cash3`, `ga_cash_pop`, ... |
+| **Idaho** | `ID` | 7 | `powerball`, `mega_millions`, `id_cash`, `id_pick3_day`, `id_pick3_night`, ... |
+| **Illinois** | `IL` | 10 | `powerball`, `mega_millions`, `il_lotto`, `il_lucky_day_lotto_evening`, ... |
+| **Indiana** | `IN` | 6 | `powerball`, `mega_millions`, `in_hoosier_lotto`, `in_cash5`, `in_daily3`, `in_daily4` |
+| **Iowa** | `IA` | 6 | `powerball`, `mega_millions`, `ia_pick3_evening`, `ia_pick3_midday`, ... |
+| **Kansas** | `KS` | 5 | `powerball`, `mega_millions`, `ks_pick3_evening`, `ks_pick3_midday`, `ks_super_cash` |
+| **Kentucky** | `KY` | 8 | `powerball`, `mega_millions`, `ky_pick3_evening`, `ky_cash_ball`, `ky_cash_pop`, ... |
+| **Louisiana** | `LA` | 7 | `powerball`, `mega_millions`, `la_lotto`, `la_easy5`, `la_pick3`, `la_pick4`, `la_pick5` |
+| **Maine** | `ME` | 5 | `powerball`, `mega_millions`, `me_megabucks_plus`, `me_pick3`, `me_pick4` |
+| **Maryland** | `MD` | 10 | `powerball`, `mega_millions`, `md_multimatch`, `md_cash4life`, `md_pick3`, ... |
+| **Massachusetts** | `MA` | 6 | `powerball`, `mega_millions`, `ma_megabucks_doubler`, `ma_masscash`, `ma_numbers`, ... |
+| **Michigan** | `MI` | 9 | `powerball`, `mega_millions`, `mi_lotto47`, `mi_fantasy5`, `mi_daily3`, `mi_keno`, ... |
+| **Minnesota** | `MN` | 5 | `powerball`, `mega_millions`, `mn_northstar_cash`, `mn_gopher5`, `mn_pick3` |
+| **Mississippi** | `MS` | 6 | `powerball`, `mega_millions`, `ms_cash3`, `ms_cash3_midday`, `ms_cash4`, `ms_cash4_midday` |
+| **Missouri** | `MO` | 5 | `powerball`, `mega_millions`, `mo_show_me_cash`, `mo_pick3`, `mo_pick4` |
+| **Montana** | `MT` | 3 | `powerball`, `mega_millions`, `mt_montana_cash` |
+| **Nebraska** | `NE` | 4 | `powerball`, `mega_millions`, `ne_pick3`, `ne_pick5` |
+| **New Hampshire** | `NH` | 5 | `powerball`, `mega_millions`, `nh_gimme5`, `nh_pick3`, `nh_pick4` |
+| **New Jersey** | `NJ` | 7 | `powerball`, `mega_millions`, `nj_jersey_cash5`, `nj_cash4life`, `nj_pick3`, `nj_pick4`, `nj_pick6` |
+| **New Mexico** | `NM` | 4 | `powerball`, `mega_millions`, `nm_roadrunner_cash`, `nm_pick3` |
+| **New York** | `NY` | 8 | `powerball`, `mega_millions`, `ny_lotto`, `ny_numbers`, `ny_win4`, `ny_take5`, `ny_cash4life`, `ny_pick10` |
+| **North Carolina** | `NC` | 5 | `powerball`, `mega_millions`, `nc_cash5`, `nc_pick3`, `nc_pick4` |
+| **North Dakota** | `ND` | 3 | `powerball`, `mega_millions`, `nd_2by2` |
+| **Ohio** | `OH` | 7 | `powerball`, `mega_millions`, `oh_classic_lotto`, `oh_rolling_cash5`, `oh_pick3`, `oh_pick4`, `oh_pick5` |
+| **Oklahoma** | `OK` | 4 | `powerball`, `mega_millions`, `ok_cash5`, `ok_pick3` |
+| **Oregon** | `OR` | 5 | `powerball`, `mega_millions`, `or_megabucks`, `or_win_for_life`, `or_pick4` |
+| **Pennsylvania** | `PA` | 9 | `powerball`, `mega_millions`, `pa_cash5`, `pa_match6`, `pa_pick2`, `pa_pick3`, `pa_pick4`, `pa_pick5`, `pa_cash4life` |
+| **Rhode Island** | `RI` | 4 | `powerball`, `mega_millions`, `ri_wild_money`, `ri_numbers` |
+| **South Carolina** | `SC` | 5 | `powerball`, `mega_millions`, `sc_palmetto_cash5`, `sc_pick3`, `sc_pick4` |
+| **South Dakota** | `SD` | 4 | `powerball`, `mega_millions`, `sd_dakota_cash`, `sd_pick3` |
+| **Tennessee** | `TN` | 6 | `powerball`, `mega_millions`, `tn_cash4life`, `tn_tennessee_cash`, `tn_pick3`, `tn_pick4` |
+| **Texas** | `TX` | 8 | `powerball`, `mega_millions`, `tx_lotto_texas`, `tx_texas_two_step`, `tx_cash5`, `tx_pick3`, `tx_daily4`, `tx_all_or_nothing` |
+| **Vermont** | `VT` | 5 | `powerball`, `mega_millions`, `vt_gimme5`, `vt_pick3`, `vt_pick4` |
+| **Virginia** | `VA` | 8 | `powerball`, `mega_millions`, `va_cash5`, `va_pick3`, `va_pick3_day`, `va_pick4`, `va_pick4_day`, `va_cash4life` |
+| **Washington** | `WA` | 6 | `powerball`, `mega_millions`, `wa_lotto`, `wa_hit5`, `wa_match4`, `wa_daily_game` |
+| **Washington D.C.** | `DC` | 3 | `powerball`, `mega_millions`, `dc_lottery` |
+| **West Virginia** | `WV` | 5 | `powerball`, `mega_millions`, `wv_cash25`, `wv_daily3`, `wv_daily4` |
+| **Wisconsin** | `WI` | 6 | `powerball`, `mega_millions`, `wi_badger5`, `wi_supercash`, `wi_pick3`, `wi_pick4` |
+| **Wyoming** | `WY` | 3 | `powerball`, `mega_millions`, `wy_cowboy_draw` |
+
+---
+
+## 8. Response Field Reference
+
+### JSON Extract Response
 
 | Field | Type | Description |
 |---|---|---|
-| `state_code` | string | Two-letter state code (e.g. `"VA"`) |
-| `state_name` | string | Full state name (e.g. `"Virginia"`) |
-| `lotteries` | array | List of lottery names returned |
-| `from_date` | string | Start date of query `YYYY-MM-DD` |
-| `to_date` | string | End date of query `YYYY-MM-DD` |
-| `total_records` | integer | Total number of draw records returned |
-| `data` | array | Array of draw result objects (see below) |
+| `state_code` | string | 2-letter state code (e.g., `"VA"`) |
+| `state_name` | string | Full state name (e.g., `"Virginia"`) |
+| `lotteries` | string[] | Human-readable lottery names returned |
+| `from_date` | string | Query start date `YYYY-MM-DD` |
+| `to_date` | string | Query end date `YYYY-MM-DD` |
+| `total_records` | integer | Number of draw records returned |
+| `data` | object[] | Array of draw result rows |
 | `csv_filename` | string | Suggested filename for CSV export |
-| `errors` | array | Per-lottery errors; empty `[]` means all OK |
-| `data_sources` | array | Data sources used for this response |
+| `errors` | string[] | Per-lottery fetch errors (empty `[]` = all OK) |
+| `warnings` | string[] | Validation warnings (e.g., cross-state lottery requests) |
+| `data_sources` | string[] | Data sources used for this response |
 
-### Draw Result Row Fields
+### Draw Result Row
 
-| Field | Type | Description |
-|---|---|---|
-| `Date` | string | Draw date in `YYYY-MM-DD` format |
-| `Lotto_Name` | string | Human-readable game name (e.g. `"Cash 5"`) |
-| `State` | string | Full state name (e.g. `"Virginia"`) |
-| `Lottery_ID` | string | Machine-readable game ID (e.g. `"va_cash5"`) |
-| `Ball_1` … `Ball_N` | string | Winning ball numbers, zero-padded (e.g. `"07"`) |
-| `Bonus` | string | Bonus / Powerball number (only if game has one) |
-| `Fireball` | string | Fireball number (Pick 3 / Pick 4 games only) |
+| Field | Type | Always Present | Description |
+|---|---|---|---|
+| `Date` | string | Yes | Draw date `YYYY-MM-DD` |
+| `Lotto_Name` | string | Yes | Human-readable game name |
+| `State` | string | Yes | Full state name |
+| `Lottery_ID` | string | Yes | Machine-readable game ID |
+| `Ball_1` ... `Ball_N` | string | Yes | Winning numbers (zero-padded for standard games, single digit for Pick 3/4/5) |
+| `Powerball` | string | No | Powerball number |
+| `Power_Play` | string | No | Power Play multiplier |
+| `Mega_Ball` | string | No | Mega Millions bonus ball |
+| `Megaplier` | string | No | Megaplier multiplier |
+| `Mega` | string | No | SuperLotto Plus Mega ball |
+| `Bonus` | string | No | General bonus ball |
+| `Bonus_Ball` | string | No | Alternate bonus ball column |
+| `Fireball` | string | No | Fireball bonus (Pick games) |
+| `Cash_Ball` | string | No | Cash4Life Cash Ball |
+| `Extra_Shot` | string | No | IL Lotto Extra Shot |
+| `Multiplier` | string | No | General multiplier |
 
-> **Note:** Ball numbers are always returned as **zero-padded two-digit strings** (e.g. `"07"`, `"12"`, `"44"`). Only columns that apply to a given game are included.
+> **Number formatting:**
+> - Standard lotto games: zero-padded 2-digit strings (e.g., `"07"`, `"12"`, `"44"`)
+> - Pick 3/4/5 games: single digit strings (`"0"` through `"9"`)
 
 ---
 
-## 8. Error Codes
+## 9. Error Handling
 
-| HTTP Status | Meaning | Resolution |
+### HTTP Status Codes
+
+| Status | Meaning | Resolution |
 |---|---|---|
-| `200 OK` | Success | — |
-| `404 Not Found` | State code or lottery ID not found | Verify state code is 2-letter uppercase; use `/lotteries/by-state/{code}` to get valid IDs |
-| `422 Unprocessable Entity` | Invalid request parameters | Check `from_date`/`to_date` format (`YYYY-MM-DD`); ensure all required params are provided |
-| `429 Too Many Requests` | Rate limit exceeded | Check `Retry-After` response header; wait before retrying |
-| `500 Internal Server Error` | Server-side error | Retry after a moment; use `/health` to check status |
+| `200` | Success | Request completed successfully |
+| `400` | Bad Request | Invalid parameters, no-lottery state, or no valid lottery IDs |
+| `404` | Not Found | Unknown state code, or no data found for CSV export |
+| `422` | Validation Error | Missing required parameters or invalid format |
+| `429` | Rate Limited | Wait for `Retry-After` seconds and retry |
+| `500` | Server Error | Internal error; check `/health` endpoint |
+| `503` | Not Ready | Service not ready; check `/health/ready` |
 
-### Error Response Format (422):
+### Error Response Formats
+
+**400 - Invalid state:**
+```json
+{
+  "detail": "State 'ZZ' not found. Use a valid 2-letter US state code (e.g., 'NY', 'CA', 'TX')."
+}
+```
+
+**400 - No state lottery:**
+```json
+{
+  "detail": "Alabama (AL) does not have a state lottery."
+}
+```
+
+**400 - Invalid lottery IDs:**
+```json
+{
+  "detail": "None of the provided lottery_ids are valid for Virginia (VA). Available: ['powerball', 'mega_millions', 'va_cash5', ...]"
+}
+```
+
+**400 - Bad date format:**
+```json
+{
+  "detail": "Invalid from_date: '2025-13-01'. Use YYYY-MM-DD format."
+}
+```
+
+**429 - Rate limited:**
+```json
+{
+  "detail": "Too many requests. Limit: 60/min per IP."
+}
+```
+
+**422 - Missing parameters (FastAPI validation):**
 ```json
 {
   "detail": [
@@ -545,89 +1062,138 @@ data.data.forEach(row => console.log(row));
 }
 ```
 
-### Rate Limit Response (429):
-```json
-{
-  "detail": "Rate limit exceeded. Try again in 42 seconds.",
-  "retry_after": 42
-}
-```
-
-### Validation Rules
-- `state_code` — 2-letter uppercase US state code (e.g. `VA`, `NY`)
-- `lottery_ids` — comma-separated, case-sensitive IDs from `/lotteries/by-state/{code}`
-- `from_date` / `to_date` — format `YYYY-MM-DD`; `to_date` must be ≥ `from_date`
-- **Max date range:** 5 years (1,825 days) per request
-- **Future dates:** automatically capped to today's date
-
 ---
 
-## 9. CSV Export
+## 10. CSV Export
 
 ### Filename Format
+
 ```
 {State}_{Lottery_Name}_{FromYYYYMMDD}_{ToYYYYMMDD}.csv
 ```
 
-**Examples:**
+Examples:
 - `Virginia_Cash_5_20250101_20251231.csv`
-- `New_York_Powerball_20200101_20251231.csv`
-- `Florida_Pick_3_Evening_20250101_20251231.csv`
+- `New_York_Powerball_Mega_Millions_20250101_20251231.csv`
 
 ### Column Order
-```
-Date, Lotto_Name, State, Lottery_ID, Ball_1, Ball_2, ..., Ball_N, [Bonus], [Fireball]
-```
 
-Columns are only included if they apply to the game being exported. Bonus/Fireball columns are omitted for games that do not have them.
-
-### Download with curl
-```bash
-# Save with auto-generated filename from Content-Disposition header
-curl -O -J "https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/extract/csv?state_code=VA&lottery_ids=va_cash5&from_date=2025-01-01&to_date=2025-12-31"
+```
+Date, Lotto_Name, State, Lottery_ID, Ball_1, Ball_2, ..., Ball_N, [Bonus columns]
 ```
 
-### Download with Python
-```python
-import requests
+Only columns that apply to the requested games are included.
 
-BASE_URL = "https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai"
+### Example CSV Content
 
-resp = requests.get(f"{BASE_URL}/extract/csv", params={
-    "state_code": "VA",
-    "lottery_ids": "va_cash5,va_pick3",
-    "from_date": "2025-01-01",
-    "to_date": "2025-12-31"
-})
-
-# Get filename from response header
-filename = resp.headers.get("Content-Disposition", "").split("filename=")[-1].strip('"')
-filename = filename or "lottery_results.csv"
-
-with open(filename, "wb") as f:
-    f.write(resp.content)
-
-print(f"Saved to {filename}")
+```csv
+Date,Lotto_Name,State,Lottery_ID,Ball_1,Ball_2,Ball_3,Ball_4,Ball_5,Powerball,Power_Play
+2025-05-26,Powerball,New York,powerball,13,47,52,64,67,25,02
+2025-05-24,Powerball,New York,powerball,12,18,28,48,52,05,03
+2025-05-21,Powerball,New York,powerball,09,29,31,34,43,02,02
 ```
+
+### Response Headers for CSV
+
+| Header | Description |
+|---|---|
+| `Content-Disposition` | Filename for download |
+| `X-Total-Records` | Number of records in the file |
+| `X-State` | State name |
+| `X-Lotteries` | Comma-separated lottery names |
+| `X-From-Date` | Query start date |
+| `X-To-Date` | Query end date |
 
 ---
 
-## 10. Data Sources & Coverage
+## 11. Data Sources & Coverage
 
-| Source | Games Covered | Historical Range |
-|---|---|---|
-| **NY Open Data** (`data.ny.gov`) | All New York State lottery games | 2010 – present |
-| **lottery.net** | CA, AZ, FL, VA, TX, NJ, IL and more | ~2015 – present |
-| **lotto.net** | Powerball, Mega Millions, multi-state games | 2010 – present |
+The API uses **7 data sources** with automatic fallback:
+
+| Source | Type | Coverage | Used For |
+|---|---|---|---|
+| **NY Open Data** (`data.ny.gov`) | Official Government API | NY games + Powerball/Mega Millions (2010+) | Primary source for NY state games |
+| **lotto.net** | Public Historical Archive | Powerball, Mega Millions, SuperLotto, FL/TX/MI/WA/OR/NJ/IL Lotto | Major multi-state and big-state games |
+| **lottery.net** | Public Historical Archive | 150+ games across all 46 lottery states | Primary source for most state games |
+| **lotteryusa.com** | Public Results Archive | Recent ~50 draws for major games | Fast fallback when lottery.net is blocked |
+| **Louisiana Lottery** | Official State CSV | LA Pick 3/4/5, Easy 5, Lotto | Direct CSV download from state |
+| **Kansas Lottery** | Official State Website | KS Pick 3, Super Cash | CSRF form + HTML scraping |
+| **Kentucky Lottery** | Official State JSON API | KY Pick 3/4, Cash Ball, Cash Pop | Real-time API via IGT/AWC |
+
+### Fallback Strategy
+
+The API automatically tries multiple sources for each game:
+
+1. **Official source** (government API or state website) - tried first
+2. **lotteryusa.com** - reliable, fast (~50 recent draws)
+3. **lottery.net** - full historical archive (may rate-limit)
+4. **lotto.net** - supplementary archive
+
+If the primary source returns 403 (rate-limited), the API automatically falls back to the next source. Rate-limited sources are cached for 10 minutes to avoid repeated failures.
 
 ### Coverage Notes
-- **Powerball / Mega Millions** — available from 2010 onward
-- **Most state games** — available from approximately 2015 onward
-- **NY lottery.net fallback** — automatically used when NY Open Data returns HTTP 403
-- **Real data only** — all results sourced from official government or verified historical archives; no random or simulated numbers
 
-### Security Headers (all responses)
-Every API response includes the following security headers:
+- **Powerball / Mega Millions** - available from 2010 onward (NY Open Data) with lotto.net fallback
+- **Most state games** - available from 2015 onward via lottery.net
+- **NY state games** - deepest history via official Open Data API
+- **All data is real** - sourced exclusively from official or verified public archives
+
+---
+
+## 12. Production Deployment
+
+### Recommended Architecture
+
+```
+Client -> Nginx/Caddy (reverse proxy) -> Uvicorn/Gunicorn -> FastAPI App
+```
+
+### Nginx Configuration
+
+```nginx
+server {
+    listen 80;
+    server_name api.yourdomain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+}
+```
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY backend/ ./backend/
+COPY frontend/build/ ./frontend/build/
+
+RUN pip install --no-cache-dir -r backend/requirements.txt
+
+EXPOSE 8000
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### Security Checklist for Production
+
+- [ ] Set `ALLOWED_ORIGINS` to your specific domain(s) (not `*`)
+- [ ] Put behind a reverse proxy with HTTPS (Nginx/Caddy)
+- [ ] Configure appropriate rate limits via env vars
+- [ ] Monitor `/metrics` endpoint for error rates
+- [ ] Use `/health/ready` for load balancer health checks
+- [ ] Review `X-Forwarded-For` header handling for accurate rate limiting behind proxy
+
+### Security Headers (Automatic)
+
+Every API response includes:
 
 | Header | Value |
 |---|---|
@@ -636,27 +1202,74 @@ Every API response includes the following security headers:
 | `X-XSS-Protection` | `1; mode=block` |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` |
 | `Cache-Control` | `no-store` |
-| `X-Request-ID` | Unique UUID per request |
+| `X-Request-ID` | Unique 8-char UUID per request |
 
 ---
 
-## 11. All Links
+## 13. Environment Variables
 
-| Resource | URL |
-|---|---|
-| **Base URL** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai` |
-| **Swagger UI (interactive)** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/docs` |
-| **ReDoc (clean docs)** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/redoc` |
-| **OpenAPI JSON spec** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/openapi.json` |
-| **Health check** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/health` |
-| **Readiness probe** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/health/ready` |
-| **Metrics** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/metrics` |
-| **API Info** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/api/info` |
-| **All States** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/lotteries/all-states` |
-| **VA Lotteries** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/lotteries/by-state/VA` |
-| **NY Lotteries** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/lotteries/by-state/NY` |
-| **Sample Extract (VA Cash 5)** | `https://8000-ixjsexmoiuawxwrh4ut4w-c07dda5e.sandbox.novita.ai/extract?state_code=VA&lottery_ids=va_cash5&from_date=2025-12-29&to_date=2025-12-31` |
+| Variable | Default | Description |
+|---|---|---|
+| `ALLOWED_ORIGINS` | `*` | Comma-separated CORS allowed origins |
+| `RATE_LIMIT_REQUESTS` | `60` | Max requests per rate limit window |
+| `RATE_LIMIT_WINDOW` | `60` | Rate limit window in seconds |
+| `STRIPE_SECRET_KEY` | (none) | Stripe API key for billing (optional) |
+| `STRIPE_WEBHOOK_SECRET` | (none) | Stripe webhook signing secret (optional) |
+
+**Example: Restrict CORS for production:**
+
+```bash
+ALLOWED_ORIGINS="https://yourdomain.com,https://app.yourdomain.com" \
+  uvicorn main:app --host 0.0.0.0 --port 8000
+```
 
 ---
 
-*Lotto Extraction API v1.1.0 — Real lottery data from official US public sources.*
+## 14. Troubleshooting
+
+### Server won't start
+
+```bash
+# Check Python version
+python3 --version  # Needs 3.9+
+
+# Check dependencies
+pip install fastapi uvicorn httpx requests beautifulsoup4 lxml pydantic
+
+# Check if port 8000 is in use
+lsof -i :8000
+```
+
+### No data returned for a game
+
+1. Check the game ID is correct: `curl http://localhost:8000/lotteries/by-state/{STATE}`
+2. External data sources may be temporarily blocked (403). The API caches 403s for 10 minutes.
+3. Try a shorter date range (recent month) first to verify the game works.
+4. Check `/metrics` for error counts.
+
+### Rate limited (429 response)
+
+Wait 60 seconds before retrying. The rate limit is per-IP, 60 requests per 60-second window. For batch processing, add delays between requests:
+
+```python
+import time
+for state in states:
+    resp = requests.get(f"{BASE_URL}/extract?...")
+    time.sleep(1.1)  # Stay under rate limit
+```
+
+### Scoreboard shows empty entries
+
+The scoreboard looks back 7 days for the latest draw. If no data is found within that window, the state won't appear in results. This typically means the upstream source is temporarily blocked.
+
+### CORS errors in browser
+
+Set `ALLOWED_ORIGINS` to include your frontend domain:
+
+```bash
+ALLOWED_ORIGINS="http://localhost:3000,https://yourdomain.com" uvicorn main:app --host 0.0.0.0 --port 8000
+```
+
+---
+
+*Lotto Extraction API v1.1.0 - Real lottery data from official US public sources.*

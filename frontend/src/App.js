@@ -10,6 +10,11 @@ import Step3_Results        from './components/Step3_Results';
 import LottoBall            from './components/LottoBall';
 import UniversalPredictor   from './components/UniversalPredictor';
 
+/* ── Mobile ── */
+import MobileAppBanner  from './components/MobileAppBanner';
+import MobileBottomNav  from './components/MobileBottomNav';
+import MobileAppScreen  from './components/MobileAppScreen';
+
 /* ── Monetization ── */
 import { MonetizationProvider, useMonetization } from './components/MonetizationContext';
 import PricingPage      from './components/PricingPage';
@@ -123,6 +128,21 @@ function AppInner() {
 
   /* ── top-level mode ── */
   const [appMode, setAppMode] = useState('extractor'); // 'extractor' | 'predictor'
+
+  /* ── Mobile app screen (shown once per session on mobile) ── */
+  const [showMobileScreen, setShowMobileScreen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    // Show on mobile only, skip if standalone PWA or already dismissed this session
+    const isMob = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || window.innerWidth <= 768;
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    const dismissed = sessionStorage.getItem('lotto_mas_dismissed');
+    return isMob && !isStandalone && !dismissed;
+  });
+
+  const dismissMobileScreen = useCallback(() => {
+    setShowMobileScreen(false);
+    try { sessionStorage.setItem('lotto_mas_dismissed', '1'); } catch {}
+  }, []);
 
   /* ── Detect ?checkout=success in URL on mount ── */
   useEffect(() => {
@@ -446,6 +466,14 @@ function AppInner() {
 
   return (
     <div className="app" data-theme="lotto">
+      {/* ══════════ MOBILE APP SCREEN — full-screen landing with app link ══════════ */}
+      {showMobileScreen && (
+        <MobileAppScreen
+          onModeChange={setAppMode}
+          onDismiss={dismissMobileScreen}
+        />
+      )}
+
       {/* ── Stripe: Checkout email/redirect modal ── */}
       <AnimatePresence>
         {pendingCheckout && (
@@ -693,6 +721,10 @@ function AppInner() {
 
       {/* ── Bottom ad banner (free plan only) ── */}
       <AdBanner position="bottom" />
+
+      {/* ══════════ MOBILE: App install banner + Bottom nav ══════════ */}
+      <MobileAppBanner />
+      <MobileBottomNav appMode={appMode} onModeChange={setAppMode} />
 
       {/* ══════════ FOOTER ══════════ */}
       <footer className="site-footer">

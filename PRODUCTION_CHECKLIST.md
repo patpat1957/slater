@@ -57,6 +57,8 @@
 | POST | `/extract` | Extract results via JSON body | ✅ |
 | GET | `/extract/csv` | Extract and download CSV via query params | ✅ |
 | POST | `/extract/csv` | Extract and download CSV via JSON body | ✅ |
+| GET | `/api/scoreboard` | Real-time multi-state scoreboard | ✅ |
+| GET | `/api/scoreboard/games` | Available scoreboard games and states | ✅ |
 | GET | `/docs` | Swagger UI interactive documentation | ✅ |
 | GET | `/redoc` | ReDoc API documentation | ✅ |
 | GET | `/openapi.json` | OpenAPI 3.0 spec | ✅ |
