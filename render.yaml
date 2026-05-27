@@ -1,12 +1,19 @@
 # ─────────────────────────────────────────────────────────────
 #  Render Blueprint — One-click deploy
 #  https://render.com/docs/blueprint-spec
+#
+#  IMPORTANT: This is a Python/FastAPI app, NOT Node.js.
+#  If Render auto-detects Node.js, change the runtime to Python
+#  in the Render Dashboard → Service Settings → Runtime.
 # ─────────────────────────────────────────────────────────────
 services:
   - type: web
     name: lotto-api
     runtime: python
     plan: free
+    region: oregon
+    branch: main
+    rootDir: ./
     buildCommand: pip install -r requirements.txt
     startCommand: cd backend && python -m uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2 --proxy-headers --forwarded-allow-ips "*" --access-log --no-server-header
     healthCheckPath: /health
