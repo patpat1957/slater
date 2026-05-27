@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, minimum-scale=1" />
     <meta name="theme-color" content="#1a1a2e" />
     <meta name="description" content="Lotto Extraction - Real lottery numbers from official sources" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Lotto" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
     <title>🎰 Lotto Extraction</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
@@ -12,5 +17,14 @@
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <script>
+      // Kill any cached service worker — prevents blank screen from stale cache
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(r => r.unregister());
+        });
+        caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+      }
+    </script>
   </body>
 </html>

@@ -9,7 +9,7 @@
  *   drawTime  {string} 'Midday' | 'Evening'
  *   state     {string} two-letter state code
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   OPTIMIZER_GAME_CONFIGS,
   convertDrawsToEntries,
@@ -24,10 +24,27 @@ import {
   computeStatus,
   runAutoCalibration,
   runOptimizerEngine,
+  runHistoricalBacktest,
   generateOEOptions,
   getNextDrawDate,
   checkCombination,
+  analyzeDrawPatterns,
+  generatePatternAwareCombo,
+  selectDiverseLines,
+  computeCoverageMetrics,
 } from './LotteryOptimizerEngine';
+import {
+  savePrediction,
+  resolvePredictions,
+  getTrackerRecords,
+  computeTrackerAnalytics,
+  analyzeMissPatterns,
+  computeLearningWeights,
+  clearTracker,
+  getRecentResults,
+  getPendingPredictions,
+  computeTodayLearning,
+} from './PredictionTracker';
 
 // ─── helper ───────────────────────────────────────────────────────────────
 function dispVal(k, isNumGame) { return isNumGame ? k + 1 : k; }
@@ -605,10 +622,11 @@ function StarFilterBar({ value, onChange }) {
 // Renders 5 / 10 / 15 / 20 selector + "Generate Lines" button.
 // On click it picks the top-N star-filtered combos from passingCombos and
 // displays them as a printable slip with Next Draw game / current day info.
-function LinesGenerator({ passingCombos, nearMissCombos, minStars, gameLabel, drawTypeStr, nextDraw, isNumGame, bonusPool, bonusLabel }) {
+function LinesGenerator({ passingCombos, nearMissCombos, minStars, gameLabel, drawTypeStr, nextDraw, isNumGame, bonusPool, bonusLabel, bonusColor, pickBonusForCombo, onSaveToTracker }) {
   const [numLines,       setNumLines]   = React.useState(5);
   const [generatedLines, setGenLines]   = React.useState(null);
   const [copied,         setCopied]     = React.useState(false);
+  const [savedToTracker, setSavedToTracker] = React.useState(false);
   const [pickedIdx,      setPickedIdx]  = React.useState(new Set()); // indices of picked lines
   const slipRef = React.useRef(null);
 
@@ -634,10 +652,24 @@ function LinesGenerator({ passingCombos, nearMissCombos, minStars, gameLabel, dr
   }, [passingCombos, nearMissCombos, minStars]);
 
   const handleGenerate = () => {
-    const lines = pool.slice(0, numLines);
+    const lines = pool.slice(0, numLines).map((r, i) => ({
+      ...r,
+      bonusNum: bonusPool > 0 && pickBonusForCombo ? pickBonusForCombo(i) : null,
+    }));
     setGenLines(lines);
     setPickedIdx(new Set());
     setCopied(false);
+    setSavedToTracker(false);
+  };
+
+  // ── Save generated lines to Prediction Tracker ──────────────────────────
+  const handleSaveToTracker = () => {
+    if (!generatedLines || generatedLines.length === 0 || !onSaveToTracker) return;
+    // Use picked lines if user selected specific ones, otherwise all generated lines
+    const linesToSave = somePicked ? pickedLines : generatedLines;
+    onSaveToTracker(linesToSave);
+    setSavedToTracker(true);
+    setTimeout(() => setSavedToTracker(false), 3000);
   };
 
   // ── Pick-list helpers ────────────────────────────────────────────────────
@@ -669,9 +701,10 @@ function LinesGenerator({ passingCombos, nearMissCombos, minStars, gameLabel, dr
   const buildLines = (lines) => lines.map((r, i) => {
     const displayCombo = isNumGame ? [...r.combo].sort((a, b) => a - b) : r.combo;
     const nums  = displayCombo.join(' - ');
+    const bonus = bonusPool > 0 && r.bonusNum != null ? ` + ${bonusLabel || 'Bonus'}: ${r.bonusNum}` : '';
     const stars = '★'.repeat(getStarCount(r)) + '☆'.repeat(5 - getStarCount(r));
     const pass  = r.fails.length === 0 ? '✅ PASS' : `⚠️ ${r.fails.join(',')}`;
-    return `Line ${i + 1}: ${nums}  ${stars}  ${pass}`;
+    return `Line ${i + 1}: ${nums}${bonus}  ${stars}  ${pass}`;
   }).join('\n');
 
   const handleCopy = () => {
@@ -843,6 +876,15 @@ function LinesGenerator({ passingCombos, nearMissCombos, minStars, gameLabel, dr
             <button className="opt-lines-print" onClick={handlePrint} title={somePicked ? `Print ${pickedLines.length} selected lines` : 'Print all lines'}>
               {somePicked ? `🖨️ Print (${pickedLines.length})` : '🖨️ Print'}
             </button>
+            {onSaveToTracker && (
+              <button
+                className={`opt-lines-tracker-save${savedToTracker ? ' opt-lines-tracker-save--saved' : ''}`}
+                onClick={handleSaveToTracker}
+                title={savedToTracker ? 'Lines saved to Prediction Tracker!' : (somePicked ? `Save ${pickedLines.length} selected lines to Prediction Tracker` : 'Save all lines to Prediction Tracker for hit/miss tracking')}
+              >
+                {savedToTracker ? '✅ Saved to Tracker!' : somePicked ? `📊 Track (${pickedLines.length})` : '📊 Save to Tracker'}
+              </button>
+            )}
             {somePicked && (
               <button className="opt-lines-remove" onClick={removeSelected} title={`Remove ${pickedLines.length} selected lines`}>
                 🗑️ Remove ({pickedLines.length})
@@ -1024,6 +1066,15 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
   const [calibReport, setCalibReport] = useState(null);
 
   const runningRef = useRef(false);
+  const pickBonusForComboRef = useRef(null); // ref to pass bonus picker into useCallback closures
+
+  // ── Prediction Tracker state ──────────────────────────────────────────
+  const [trackerData,     setTrackerData]     = useState(null);  // { analytics, missAnalysis, learningWeights, todayLearning, recentResults, pendingPredictions, records }
+  const [showTracker,     setShowTracker]     = useState(false);
+  const [trackerVersion,  setTrackerVersion]  = useState(0);     // bump to refresh tracker data
+  const [showAllHistory,  setShowAllHistory]  = useState(false);  // toggle full history view
+  const [seedingStatus,   setSeedingStatus]   = useState('');     // auto-seed progress message
+  const seedingRef = useRef(false);  // prevent double-seed
 
   // ── Recompute stats when draws/game changes ────────────────────────────
   useEffect(() => {
@@ -1063,6 +1114,137 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
   // eslint-disable-next-line
   }, [draws.length, gameType, drawTime, allHist.length]);
 
+  // ── Tracker: resolve past predictions + load analytics on draw data change ──
+  useEffect(() => {
+    if (!draws || draws.length === 0) return;
+    try {
+      // Resolve any pending predictions against actual draw results
+      resolvePredictions({ gameType, state, drawTime: drawTypeStr, draws });
+      // Load tracker data — focused on today's results and cumulative learning
+      const records = getTrackerRecords(gameType, state, drawTypeStr);
+      if (records.length > 0) {
+        const analytics = computeTrackerAnalytics(records);
+        const missAnalysis = analyzeMissPatterns(records, poolSize, isNumGame);
+        const lw = computeLearningWeights(records, poolSize, isNumGame);
+        const recentResults = getRecentResults(records, 10);
+        const pendingPreds = getPendingPredictions(records);
+        // Compute today's learning from the most recent resolved session
+        const todayLearning = recentResults.length > 0
+          ? computeTodayLearning(recentResults[0], poolSize, isNumGame)
+          : null;
+        setTrackerData({ analytics, missAnalysis, learningWeights: lw, records, recentResults, pendingPredictions: pendingPreds, todayLearning });
+      } else {
+        setTrackerData(null);
+      }
+    } catch (e) { console.warn('[Tracker] load error:', e); }
+  // eslint-disable-next-line
+  }, [draws.length, gameType, state, drawTime, trackerVersion]);
+
+  // ── Auto-seed: when tracker is empty but draws exist, generate predictions for
+  //    the last 20 real draws so hit/miss results + learning are populated immediately ──
+  useEffect(() => {
+    if (seedingRef.current) return;
+    if (!draws || draws.length === 0) return;
+    if (allHist.length < n + 10) return;
+    // Only seed if tracker is completely empty (no records at all)
+    const records = getTrackerRecords(gameType, state, drawTypeStr);
+    if (records.length > 0) return; // already has data
+    seedingRef.current = true;
+    setSeedingStatus('⚡ Analyzing last 20 draws to start learning...');
+
+    // Run a quick 20-draw backtest silently (with bonus ball support)
+    runHistoricalBacktest({
+      allHist, n, poolSize, isNumGame, count: 20,
+      bonusPool, bonusHist,
+      onProgress: (pct) => {
+        setSeedingStatus(`⚡ Analyzing draws... ${pct}%`);
+      },
+    }).then(btResults => {
+      if (!btResults || btResults.length === 0) {
+        setSeedingStatus('');
+        return;
+      }
+      // Save each result as a tracker prediction (bonus picks now come from backtest engine)
+      btResults.forEach(bt => {
+        if (!bt.pred5 || bt.pred5.length === 0) return;
+        savePrediction({
+          gameType, state, drawTime: drawTypeStr,
+          drawDate: bt.drawDate,
+          pred5: bt.pred5,
+          bonusPicks: (bt.bonusPicks || []).filter(x => x != null),
+          meta: { n, poolSize, isNumGame, totalDraws: bt.drawIndex, starRatings: bt.pred5.map(() => 0) },
+        });
+      });
+      // Resolve all predictions against actual draws
+      const drawsForResolve = allHist.map(e => ({
+        date: e.ts,
+        numbers: e.nums.slice(0, n).map(Number),
+        bonus: e.nums.length > n ? Number(e.nums[n]) : null,
+      }));
+      resolvePredictions({ gameType, state, drawTime: drawTypeStr, draws: drawsForResolve });
+      setSeedingStatus('');
+      setTrackerVersion(v => v + 1); // refresh tracker data
+    }).catch(e => {
+      console.warn('[Tracker seed] error:', e);
+      setSeedingStatus('');
+    });
+  // eslint-disable-next-line
+  }, [draws.length, allHist.length, gameType, state, drawTypeStr]);
+
+  // Helper: get learning boosts for optimizer (from tracker data)
+  const getLearningBoosts = useCallback(() => {
+    if (!trackerData?.learningWeights?.numberBoosts) return null;
+    const boosts = trackerData.learningWeights.numberBoosts;
+    return Object.keys(boosts).length > 0 ? boosts : null;
+  }, [trackerData]);
+
+  // Helper: save prediction after optimizer run
+  const saveTrackerPrediction = useCallback((res, nd, bonusPicksFn) => {
+    if (!res?.pred5 || res.pred5.length === 0 || !nd?.dateStr) return;
+    try {
+      const bonusPicks = res.pred5.map((_, i) => bonusPicksFn ? bonusPicksFn(i) : null).filter(x => x != null);
+      const starRatings = res.pred5.map(p => getStarCount(p));
+      savePrediction({
+        gameType, state, drawTime: drawTypeStr,
+        drawDate: nd.dateStr,
+        pred5: res.pred5,
+        bonusPicks,
+        meta: { n, poolSize, isNumGame, totalDraws: allHist.length, starRatings },
+      });
+      setTrackerVersion(v => v + 1); // trigger tracker data refresh
+    } catch (e) { console.warn('[Tracker] save error:', e); }
+  }, [gameType, state, drawTypeStr, n, poolSize, isNumGame, allHist.length]);
+
+  // Helper: save Lines Generator lines to tracker (the actual lines user plays)
+  const saveLinesToTracker = useCallback((lines) => {
+    if (!lines || lines.length === 0 || !nextDraw?.dateStr) return;
+    try {
+      // Convert Lines Generator lines into pred5 format for tracker
+      const pred5 = lines.map(l => ({
+        combo: l.combo,
+        score: l.score || 0,
+        fails: l.fails || [],
+        walkForwardHits: l.walkForwardHits,
+        walkForwardTotal: l.walkForwardTotal,
+      }));
+      const bonusPicks = lines.map(l => l.bonusNum).filter(x => x != null);
+      const starRatings = lines.map(l => getStarCount(l));
+      savePrediction({
+        gameType, state, drawTime: drawTypeStr,
+        drawDate: nextDraw.dateStr,
+        pred5,
+        bonusPicks,
+        meta: {
+          n, poolSize, isNumGame,
+          totalDraws: allHist.length,
+          starRatings,
+          source: 'lines_generator', // mark that these are the user's actual play lines
+        },
+      });
+      setTrackerVersion(v => v + 1);
+    } catch (e) { console.warn('[Tracker] save lines error:', e); }
+  }, [gameType, state, drawTypeStr, nextDraw, n, poolSize, isNumGame, allHist.length]);
+
   // ── Auto-Calibrate ─────────────────────────────────────────────────────
   const handleAutoCalibrate = useCallback(async () => {
     if (running) return;
@@ -1094,6 +1276,7 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
     setStatus(`⚙️ Running 5,000-iteration optimizer on ${allHist.length} actual ${gameLabel} draws…`);
 
     const opts = { sum: 'on', oe: cal.bestOE, consec: cal.bestConsec, hcpl: 'on', rep: cal.bestRep };
+    const boosts = getLearningBoosts();
     const res = await runOptimizerEngine({
       entries, n, poolSize, isNumGame,
       saLvl: cal.bestSA.lvl, faLvl: cal.bestFA.lvl,
@@ -1102,16 +1285,21 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
       onProgress: p => setProgress(85 + Math.round(p * 0.15)),
       drawType: drawTypeStr,
       gameType,
+      learningBoosts: boosts,
     });
 
     const nd = getNextDrawDate(gameType, drawTypeStr);
     setResults(res);
     setNextDraw(nd);
     setProgress(0);
-    setStatus('');
+    setStatus(boosts ? '✅ Done — adaptive learning weights applied' : '');
     setRunning(false);
     runningRef.current = false;
-  }, [allHist, entries, n, poolSize, isNumGame, gameType, gameLabel, drawTypeStr, topCount, running]);
+    // Save prediction to tracker with bonus picks from pickBonusForCombo (available via closure)
+    // Defer to allow state to settle; pickBonusForCombo is defined later in render body
+    // but the setTimeout executes after render, so it will be available
+    setTimeout(() => saveTrackerPrediction(res, nd, pickBonusForComboRef.current), 100);
+  }, [allHist, entries, n, poolSize, isNumGame, gameType, gameLabel, drawTypeStr, topCount, running, getLearningBoosts, saveTrackerPrediction]);
 
   // ── Manual Optimize (no calibration) ──────────────────────────────────
   const handleOptimize = useCallback(async () => {
@@ -1133,6 +1321,7 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
     const saL = saLevels.length === 5 && saLevels[0].length > 0 ? saLevels : computeSALevels(allHist, poolSize, isNumGame, n);
     const faL = faLevels.length === 4 && faLevels[0].length > 0 ? faLevels : computeFALevels(histFreq.overall, poolSize, isNumGame);
 
+    const boosts = getLearningBoosts();
     const res = await runOptimizerEngine({
       entries, n, poolSize, isNumGame,
       saLvl: selectedSA, faLvl: selectedFA,
@@ -1141,16 +1330,18 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
       onProgress: p => setProgress(p),
       drawType: drawTypeStr,
       gameType,
+      learningBoosts: boosts,
     });
 
     const nd = getNextDrawDate(gameType, drawTypeStr);
     setResults(res);
     setNextDraw(nd);
     setProgress(0);
-    setStatus('');
+    setStatus(boosts ? '✅ Done — adaptive learning weights applied' : '');
     setRunning(false);
     runningRef.current = false;
-  }, [allHist, entries, n, poolSize, isNumGame, gameType, gameLabel, drawTypeStr, saLevels, faLevels, selectedSA, selectedFA, optSum, optOE, optConsec, optHCPL, optRep, topCount, running]);
+    setTimeout(() => saveTrackerPrediction(res, nd, pickBonusForComboRef.current), 100);
+  }, [allHist, entries, n, poolSize, isNumGame, gameType, gameLabel, drawTypeStr, saLevels, faLevels, selectedSA, selectedFA, optSum, optOE, optConsec, optHCPL, optRep, topCount, running, getLearningBoosts, saveTrackerPrediction]);
 
   // ── Manual combo check ─────────────────────────────────────────────────
   const handleManualCheck = useCallback(() => {
@@ -1185,29 +1376,51 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
   const bonusPool = cfg.bonusPool || 0;
   const bonusLabel = cfg.bonusLabel || '';
   // bonusHist: each entry has nums[0] = the bonus ball value (index n in draw)
-  const bonusHist = bonusPool > 0 && allHist.length > 0
+  // draws[] may carry bonus in .bonus field; convertDrawsToEntries appends it at nums[n].
+  // Also build bonusHist from original draws[] as fallback (bonus field preserved there).
+  const bonusHistFromEntries = bonusPool > 0 && allHist.length > 0
     ? allHist.filter(e => e.nums.length > n && e.nums[n] != null).map(e => ({ nums: [e.nums[n]] }))
     : [];
-  const lastBonusNum = bonusPool > 0 && allHist.length > 0
-    ? (allHist[allHist.length - 1].nums[n] ?? null)
+  // Fallback: read bonus directly from the draws prop (before conversion strips it)
+  const bonusHistFromDraws = bonusPool > 0 && draws.length > 0
+    ? draws.filter(d => d.bonus != null && !isNaN(Number(d.bonus))).map(d => ({ nums: [Number(d.bonus)] }))
+    : [];
+  // Use whichever source has more data (entries may lose bonus if conversion failed)
+  const bonusHist = bonusHistFromEntries.length >= bonusHistFromDraws.length
+    ? bonusHistFromEntries : bonusHistFromDraws;
+  const lastBonusNum = bonusPool > 0 && draws.length > 0
+    ? (draws[0]?.bonus != null ? Number(draws[0].bonus)
+       : (allHist.length > 0 ? (allHist[allHist.length - 1].nums[n] ?? null) : null))
     : null;
 
   // ─── Bonus ball picks for combo lines (rotate through top-frequency bonus numbers) ──
   const bonusColor = cfg.bonusLabel?.includes('gold') ? '#f59e0b' : '#ef4444';
-  const topBonusNums = React.useMemo(() => {
-    if (!bonusPool || !bonusHist || bonusHist.length === 0) return [];
-    const freq = new Array(bonusPool).fill(0);
-    bonusHist.forEach(e => { const k = parseInt(e.nums[0]) - 1; if (k >= 0 && k < bonusPool) freq[k]++; });
-    return freq.map((cnt, idx) => ({ num: idx + 1, cnt }))
-      .sort((a, b) => b.cnt - a.cnt)
-      .slice(0, 5)
-      .map(x => x.num);
-  }, [bonusHist, bonusPool]);
+  // Compute top 5 hottest bonus numbers directly (no useMemo to avoid stale closure issues)
+  const topBonusNums = (() => {
+    if (!bonusPool) return [];
+    // Try frequency-based approach first
+    if (bonusHist && bonusHist.length > 0) {
+      const freq = new Array(bonusPool).fill(0);
+      bonusHist.forEach(e => { const k = parseInt(e.nums[0]) - 1; if (k >= 0 && k < bonusPool) freq[k]++; });
+      const result = freq.map((cnt, idx) => ({ num: idx + 1, cnt }))
+        .sort((a, b) => b.cnt - a.cnt)
+        .slice(0, 5)
+        .map(x => x.num);
+      if (result.length > 0) return result;
+    }
+    // Fallback: generate 5 evenly spaced bonus numbers from the pool
+    // This ensures bonus balls ALWAYS render for games that have them
+    const step = Math.max(1, Math.floor(bonusPool / 5));
+    return [1, 1 + step, 1 + step * 2, 1 + step * 3, 1 + step * 4]
+      .map(v => Math.min(v, bonusPool));
+  })();
   // Pick bonus for combo at index i: cycle through top 5 hot bonus numbers
   const pickBonusForCombo = (i) => {
     if (!bonusPool || topBonusNums.length === 0) return null;
     return topBonusNums[i % topBonusNums.length];
   };
+  // Keep ref in sync so useCallback closures can access it
+  pickBonusForComboRef.current = pickBonusForCombo;
 
   // ─── OE options ────────────────────────────────────────────────────────
   const oeOptions = generateOEOptions(n);
@@ -1419,6 +1632,9 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
             isNumGame={isNumGame}
             bonusPool={bonusPool}
             bonusLabel={bonusLabel}
+            bonusColor={bonusColor}
+            pickBonusForCombo={pickBonusForCombo}
+            onSaveToTracker={saveLinesToTracker}
           />
 
           {/* ── Manual combo check ── */}
@@ -1844,11 +2060,26 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
                   ) : (
                     filteredPred.map((p, i) => {
                       const starCount = getStarCount(p);
+                      const bNum = pickBonusForCombo(i);
                       return (
                         <div key={i} className="opt-pred-row">
                           <span className="opt-pred-rank">{rankEmojis[i] || `${i + 1}`}</span>
                           <div className="opt-pred-balls">
                             {p.combo.map((n, j) => <Ball key={j} num={n} isNumGame={isNumGame} />)}
+                            {bonusPool > 0 && bNum != null && (
+                              <span className="opt-ball opt-ball--bonus" style={{
+                                background: (bonusColor || '#ef4444') + '22',
+                                border: `2px solid ${bonusColor || '#ef4444'}`,
+                                color: bonusColor || '#ef4444',
+                                fontWeight: 800,
+                                borderRadius: '50%',
+                                width: 32, height: 32,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: 13, marginLeft: 4,
+                              }} title={bonusLabel || 'Bonus ball'}>
+                                {String(bNum).padStart(2, '0')}
+                              </span>
+                            )}
                           </div>
                           <StarBar count={starCount} />
                           <span className="opt-pred-tag">
@@ -1866,6 +2097,63 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
                       );
                     })
                   )}
+                  {/* ── V2: Coverage Metrics Banner ── */}
+                  {results.coverageMetrics && (
+                    <div style={{
+                      margin: '10px 0 6px', padding: '10px 14px', borderRadius: 8,
+                      background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+                      border: '1px solid #6366f1',
+                    }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#a5b4fc', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span>🗺️</span> Coverage Analysis — How Your 5 Lines Cover the Pool
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 8 }}>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: results.coverageMetrics.coverageRatio >= 0.3 ? '#34d399' : '#fbbf24' }}>
+                            {(results.coverageMetrics.coverageRatio * 100).toFixed(0)}%
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Pool Coverage</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#60a5fa' }}>
+                            {results.coverageMetrics.uniqueNumbers}/{results.coverageMetrics.totalPicks}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Unique/Total</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: results.coverageMetrics.overlapRatio <= 0.15 ? '#34d399' : '#ef4444' }}>
+                            {(results.coverageMetrics.overlapRatio * 100).toFixed(0)}%
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Overlap</div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 800, color: results.coverageMetrics.zoneCoverage >= 0.8 ? '#34d399' : '#fbbf24' }}>
+                            {results.coverageMetrics.zonesHit}/{results.coverageMetrics.totalZones}
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#9ca3af' }}>Zones Hit</div>
+                        </div>
+                      </div>
+                      {results.coverageMetrics.overlapRatio <= 0.1 && (
+                        <div style={{ fontSize: '0.7rem', color: '#34d399', marginTop: 6, textAlign: 'center' }}>
+                          ✅ Excellent diversity — minimal overlap between lines
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── V2: Method Info ── */}
+                  {results.patterns && (
+                    <div style={{
+                      margin: '4px 0 8px', padding: '6px 12px', borderRadius: 6,
+                      background: '#1f2937', border: '1px solid #374151', fontSize: '0.72rem', color: '#9ca3af',
+                    }}>
+                      <span style={{ color: '#a78bfa', fontWeight: 700 }}>V2 Engine</span>
+                      {' — '}Pattern-aware generation (zone coverage + gap structure + spread matching)
+                      {' · '}Diversity selection (greedy set-cover for max unique numbers)
+                      {' · '}Adaptive learning ({Object.keys(trackerData?.learningWeights?.numberBoosts || {}).length} weight adjustments)
+                    </div>
+                  )}
+
                   <div className="opt-next-draw__disclaimer">
                     ⚠️ Predictions are statistical — not a guarantee of winning.<br />
                     🔬 All 5,000 iterations scored against {results.allHist?.length || allHist.length} actual {gameLabel} draws.<br />
@@ -1894,6 +2182,487 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
           </details>
         </>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          LEARNING STATUS INDICATOR — shown above tracker when learning active
+          ═══════════════════════════════════════════════════════════════════ */}
+      {trackerData?.learningWeights?.confidence > 0 && Object.keys(trackerData.learningWeights.numberBoosts || {}).length > 0 && (
+        <div className="opt-tracker__learning-badge" style={{
+          margin: '10px 0', padding: '8px 14px', borderRadius: 8,
+          background: 'linear-gradient(135deg, #065f46 0%, #064e3b 100%)',
+          color: '#6ee7b7', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: 8,
+          border: '1px solid #10b981'
+        }}>
+          <span style={{ fontSize: '1.1em' }}>🧠</span>
+          <span>
+            <strong>Adaptive Learning Active</strong> ({trackerData.learningWeights.confidence}% confidence)
+            {' — '}adjusting {Object.keys(trackerData.learningWeights.numberBoosts).length} number weights
+            {trackerData.analytics?.avgBestHits >= 3
+              ? <span style={{ color: '#34d399' }}>{' '}| Goal ON TRACK ({trackerData.analytics.avgBestHits} avg hits)</span>
+              : <span style={{ color: '#fbbf24' }}>{' '}| Working toward 3+ hits (current: {trackerData.analytics?.avgBestHits || 0})</span>
+            }
+          </span>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          PREDICTION TRACKER — Today's Hit/Miss + Learning + Next Draw Adjustments
+          ═══════════════════════════════════════════════════════════════════ */}
+      <div className="opt-tracker">
+        <button
+          className={`opt-tracker__toggle${showTracker ? ' opt-tracker__toggle--open' : ''}`}
+          onClick={() => setShowTracker(v => !v)}
+        >
+          📊 Prediction Tracker {trackerData?.todayLearning && (
+            <span className="opt-tracker__badge">
+              {trackerData.todayLearning.goalMet ? '✅ Goal Met' : `${trackerData.todayLearning.bestLineHits}/${n} hits`}
+            </span>
+          )}
+          {!trackerData?.todayLearning && trackerData?.pendingPredictions?.length > 0 && (
+            <span className="opt-tracker__badge" style={{ background: '#92400e' }}>
+              {trackerData.pendingPredictions.length} pending
+            </span>
+          )}
+          <span className="opt-tracker__arrow">{showTracker ? '▲' : '▼'}</span>
+        </button>
+
+        {showTracker && (
+          <div className="opt-tracker__body">
+            {/* Goal banner */}
+            <div className="opt-tracker__goal">
+              <span className="opt-tracker__goal-icon">🎯</span>
+              <span className="opt-tracker__goal-text">
+                Goal: At least <strong>3 winning numbers</strong> per line per game
+              </span>
+              {trackerData?.analytics?.resolvedSessions > 0 && (
+                <span className={`opt-tracker__goal-status${trackerData.analytics.avgBestHits >= 3 ? ' opt-tracker__goal-status--met' : ''}`}>
+                  {trackerData.analytics.avgBestHits >= 3 ? '✅ ON TRACK' : `📈 Avg: ${trackerData.analytics.avgBestHits} hits — learning & adjusting...`}
+                </span>
+              )}
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════════
+                SECTION 1: PENDING PREDICTIONS (waiting for draw results)
+                ═══════════════════════════════════════════════════════════ */}
+            {trackerData?.pendingPredictions?.length > 0 && (
+              <div className="opt-tracker__section" style={{ borderLeft: '3px solid #f59e0b', paddingLeft: 10 }}>
+                <div className="opt-tracker__section-title" style={{ color: '#fbbf24' }}>
+                  ⏳ Predictions Waiting for Draw Results
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#d1d5db', marginBottom: 6 }}>
+                  These predictions will be compared against actual results when you reload draw data after the draw.
+                </div>
+                {trackerData.pendingPredictions.slice(0, 3).map((rec, ri) => (
+                  <div key={rec.id || ri} style={{
+                    margin: '4px 0', padding: '6px 10px', borderRadius: 6,
+                    background: 'rgba(245,158,11,0.08)', border: '1px solid #f59e0b33',
+                  }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#fbbf24', marginBottom: 3 }}>
+                      📅 Target: {rec.drawDate} — {rec.combos.length} lines saved
+                      {rec.meta?.source === 'lines_generator' && <span style={{ marginLeft: 6, fontSize: '0.68rem', background: '#3b82f6', color: '#fff', padding: '1px 5px', borderRadius: 4 }}>Lines Gen</span>}
+                    </div>
+                    {rec.combos.slice(0, 3).map((c, ci) => (
+                      <div key={ci} style={{ fontSize: '0.72rem', padding: '1px 0', color: '#9ca3af' }}>
+                        Line {ci+1}: {c.nums.join(', ')}
+                        {rec.bonusPicks?.[ci] != null && (
+                          <span style={{ color: bonusColor, fontWeight: 600 }}>
+                            {' + '}{bonusLabel ? bonusLabel.split('(')[0].trim() : 'Bonus'}: {rec.bonusPicks[ci]}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {rec.combos.length > 3 && <div style={{ fontSize: '0.68rem', color: '#6b7280' }}>...and {rec.combos.length - 3} more lines</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════
+                SECTION 2: TODAY'S HIT/MISS REPORT (most recent draw)
+                ═══════════════════════════════════════════════════════════ */}
+            {trackerData?.todayLearning && (() => {
+              const tl = trackerData.todayLearning;
+              const latestRec = trackerData.recentResults[0];
+              return (
+                <div className="opt-tracker__section" style={{
+                  borderLeft: `3px solid ${tl.goalMet ? '#10b981' : '#ef4444'}`,
+                  paddingLeft: 10,
+                }}>
+                  <div className="opt-tracker__section-title" style={{ color: tl.goalMet ? '#10b981' : '#ef4444', fontSize: '0.92rem' }}>
+                    {tl.goalMet ? '✅' : '❌'} {tl.drawDate} — Hit/Miss Report
+                  </div>
+
+                  {/* Actual draw numbers */}
+                  <div style={{ margin: '6px 0', fontSize: '0.82rem' }}>
+                    <strong style={{ color: '#d1d5db' }}>Actual Draw:</strong>{' '}
+                    {tl.actualNums.map((num, ni) => (
+                      <span key={ni} style={{
+                        display: 'inline-block', margin: '0 3px', padding: '2px 8px', borderRadius: 5,
+                        background: tl.hitNumbers.includes(num) ? '#10b981' : '#374151',
+                        color: tl.hitNumbers.includes(num) ? '#fff' : '#d1d5db',
+                        fontWeight: 700, fontSize: '0.85rem',
+                        boxShadow: tl.hitNumbers.includes(num) ? '0 0 6px #10b98166' : 'none',
+                      }}>{num}</span>
+                    ))}
+                    {tl.actualBonus != null && (
+                      <span style={{
+                        display: 'inline-block', margin: '0 3px', padding: '2px 8px', borderRadius: 5,
+                        background: bonusColor + '33', color: bonusColor, fontWeight: 700, fontSize: '0.85rem',
+                        border: `1px solid ${bonusColor}66`,
+                      }}>{tl.actualBonus}</span>
+                    )}
+                  </div>
+
+                  {/* Summary stats */}
+                  <div className="opt-tracker__cards" style={{ marginTop: 6 }}>
+                    <div className="opt-tracker__card">
+                      <div className="opt-tracker__card-label">Best Line</div>
+                      <div className={`opt-tracker__card-val${tl.bestLineHits >= 3 ? ' opt-tracker__card-val--good' : ''}`}>
+                        {tl.bestLineHits}/{n}
+                      </div>
+                      <div className="opt-tracker__card-sub">hits</div>
+                    </div>
+                    <div className="opt-tracker__card">
+                      <div className="opt-tracker__card-label">Coverage</div>
+                      <div className={`opt-tracker__card-val${tl.coverage >= 60 ? ' opt-tracker__card-val--good' : ''}`}>
+                        {tl.coverage}%
+                      </div>
+                      <div className="opt-tracker__card-sub">of actual nums</div>
+                    </div>
+                    <div className="opt-tracker__card">
+                      <div className="opt-tracker__card-label">Missed</div>
+                      <div className="opt-tracker__card-val" style={{ color: tl.totallyMissed.length === 0 ? '#10b981' : '#ef4444' }}>
+                        {tl.totallyMissed.length}
+                      </div>
+                      <div className="opt-tracker__card-sub">not in any line</div>
+                    </div>
+                    <div className="opt-tracker__card">
+                      <div className="opt-tracker__card-label">Goal</div>
+                      <div className="opt-tracker__card-val" style={{ color: tl.goalMet ? '#10b981' : '#ef4444', fontSize: '1rem' }}>
+                        {tl.goalMet ? '✅ MET' : '❌ MISS'}
+                      </div>
+                      <div className="opt-tracker__card-sub">3+ hits needed</div>
+                    </div>
+                    {/* ── Bonus Ball (Mega Ball / Powerball) Summary Card ── */}
+                    {tl.bonusSummary && (
+                      <div className="opt-tracker__card" style={{
+                        borderTop: `2px solid ${bonusColor}`,
+                        background: `${bonusColor}11`,
+                      }}>
+                        <div className="opt-tracker__card-label" style={{ color: bonusColor }}>
+                          {bonusLabel || 'Bonus Ball'}
+                        </div>
+                        <div className="opt-tracker__card-val" style={{
+                          color: tl.bonusSummary.anyBonusHit ? '#10b981' : '#ef4444',
+                          fontSize: '1rem',
+                        }}>
+                          {tl.bonusSummary.anyBonusHit ? '✅ HIT' : '❌ MISS'}
+                        </div>
+                        <div className="opt-tracker__card-sub" style={{ color: '#9ca3af' }}>
+                          Actual: <strong style={{ color: bonusColor }}>{tl.bonusSummary.actualBonus}</strong>
+                          {' · '}Picked: {tl.bonusSummary.bonusPicks.length > 0
+                            ? tl.bonusSummary.bonusPicks.join(', ')
+                            : 'none'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Per-line results */}
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#9ca3af', marginBottom: 4 }}>Your Prediction Lines vs Actual:</div>
+                    {latestRec?.outcome?.results.map((line, li) => (
+                      <div key={li} style={{
+                        fontSize: '0.76rem', padding: '3px 0', display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap',
+                      }}>
+                        <span style={{ color: '#6b7280', minWidth: 50, fontWeight: 600 }}>Line {li+1}:</span>
+                        {latestRec.combos[li]?.nums.map((num, ni) => {
+                          const isHit = line.hits.includes(Number(num));
+                          return (
+                            <span key={ni} style={{
+                              display: 'inline-block', padding: '2px 6px', borderRadius: 4, fontWeight: 700, fontSize: '0.78rem',
+                              background: isHit ? '#10b981' : '#4b5563',
+                              color: isHit ? '#fff' : '#6b7280',
+                              boxShadow: isHit ? '0 0 4px #10b98144' : 'none',
+                            }}>{num}</span>
+                          );
+                        })}
+                        {line.bonusPick != null && (
+                          <span style={{
+                            padding: '2px 6px', borderRadius: 4, fontWeight: 700, fontSize: '0.78rem',
+                            background: line.bonusHit ? bonusColor : '#4b556344',
+                            color: line.bonusHit ? '#fff' : '#6b7280',
+                            border: `1px solid ${bonusColor}55`,
+                          }}>{line.bonusPick}</span>
+                        )}
+                        <span style={{
+                          marginLeft: 'auto', fontWeight: 700, fontSize: '0.75rem', padding: '1px 6px', borderRadius: 4,
+                          background: line.hitCount >= 3 ? '#10b98122' : line.hitCount >= 2 ? '#fbbf2422' : '#ef444422',
+                          color: line.hitCount >= 3 ? '#10b981' : line.hitCount >= 2 ? '#fbbf24' : '#ef4444',
+                        }}>
+                          {line.hitCount}/{n} hit{line.hitCount !== 1 ? 's' : ''}
+                          {line.bonusHit && <span style={{ color: bonusColor }}> +bonus!</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Numbers we completely missed */}
+                  {tl.totallyMissed.length > 0 && (
+                    <div style={{ marginTop: 8, padding: '6px 8px', borderRadius: 6, background: '#ef444411', border: '1px solid #ef444422' }}>
+                      <div style={{ fontSize: '0.76rem', fontWeight: 600, color: '#ef4444', marginBottom: 3 }}>
+                        Numbers Drawn But Missing From ALL Lines:
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {tl.totallyMissed.map((num, i) => (
+                          <span key={i} style={{
+                            display: 'inline-block', padding: '2px 8px', borderRadius: 5,
+                            background: '#ef4444', color: '#fff', fontWeight: 700, fontSize: '0.82rem',
+                          }}>{num}</span>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#ef9a9a', marginTop: 3 }}>
+                        These numbers will be boosted in the next prediction to improve coverage.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* ═══════════════════════════════════════════════════════════
+                SECTION 3: WHAT WAS LEARNED — adjustments for next draw
+                ═══════════════════════════════════════════════════════════ */}
+            {trackerData?.todayLearning?.adjustments?.length > 0 && (
+              <div className="opt-tracker__section" style={{ borderLeft: '3px solid #8b5cf6', paddingLeft: 10 }}>
+                <div className="opt-tracker__section-title" style={{ color: '#a78bfa', fontSize: '0.92rem' }}>
+                  🧠 What Was Learned — Next Draw Adjustments
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: 6 }}>
+                  Based on the latest draw results, these adjustments are automatically applied to your next predictions:
+                </div>
+                {trackerData.todayLearning.adjustments.map((adj, i) => (
+                  <div key={i} style={{
+                    margin: '4px 0', padding: '6px 8px', borderRadius: 6, fontSize: '0.78rem',
+                    background: adj.type === 'boost' ? '#10b98111' : adj.type === 'reduce' ? '#ef444411' : adj.type === 'success' ? '#10b98111' : adj.type === 'reinforce' ? '#3b82f611' : '#8b5cf611',
+                    border: `1px solid ${adj.type === 'boost' ? '#10b98133' : adj.type === 'reduce' ? '#ef444433' : adj.type === 'success' ? '#10b98133' : adj.type === 'reinforce' ? '#3b82f633' : '#8b5cf633'}`,
+                    color: '#d1d5db',
+                  }}>
+                    <span style={{ marginRight: 6 }}>{adj.icon}</span>
+                    {adj.text}
+                    {adj.nums && (
+                      <div style={{ marginTop: 3, display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                        {adj.nums.map((num, ni) => (
+                          <span key={ni} style={{
+                            display: 'inline-block', padding: '1px 6px', borderRadius: 4, fontWeight: 700, fontSize: '0.74rem',
+                            background: adj.type === 'boost' ? '#10b981' : adj.type === 'reduce' ? '#ef4444' : adj.type === 'reinforce' ? '#3b82f6' : '#8b5cf6',
+                            color: '#fff',
+                          }}>{num}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════
+                SECTION 4: CUMULATIVE LEARNING — weight adjustments active
+                ═══════════════════════════════════════════════════════════ */}
+            {trackerData?.learningWeights?.insights?.length > 0 && (
+              <div className="opt-tracker__section" style={{ borderLeft: '3px solid #10b981', paddingLeft: 10 }}>
+                <div className="opt-tracker__section-title" style={{ color: '#6ee7b7', fontSize: '0.88rem' }}>
+                  ⚡ Active Learning Adjustments for Next Prediction
+                  <span className="opt-tracker__confidence" style={{ marginLeft: 8 }}>
+                    {trackerData.learningWeights.confidence}% confidence
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: 6 }}>
+                  These cumulative weight adjustments are learned from all past results and automatically applied when you generate predictions:
+                </div>
+                {trackerData.learningWeights.insights.map((insight, i) => (
+                  <div key={i} className="opt-tracker__insight opt-tracker__insight--learning" style={{ fontSize: '0.78rem' }}>
+                    {insight}
+                  </div>
+                ))}
+                {Object.keys(trackerData.learningWeights.numberBoosts || {}).length > 0 && (
+                  <div style={{ marginTop: 6, padding: '6px 8px', borderRadius: 6, background: '#10b98111', border: '1px solid #10b98122' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#6ee7b7', marginBottom: 4 }}>
+                      Number Weight Changes (applied to next prediction):
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {Object.entries(trackerData.learningWeights.numberBoosts)
+                        .sort(([,a],[,b]) => b - a)
+                        .slice(0, 12)
+                        .map(([num, w]) => (
+                          <span key={num} style={{
+                            display: 'inline-block', padding: '2px 6px', borderRadius: 4, fontSize: '0.72rem', fontWeight: 700,
+                            background: w > 1 ? '#10b98133' : '#ef444433',
+                            color: w > 1 ? '#6ee7b7' : '#fca5a5',
+                            border: `1px solid ${w > 1 ? '#10b98144' : '#ef444444'}`,
+                          }}>
+                            #{num} {w > 1 ? '↑' : '↓'}{Math.abs((w - 1) * 100).toFixed(0)}%
+                          </span>
+                        ))}
+                      {Object.keys(trackerData.learningWeights.numberBoosts).length > 12 && (
+                        <span style={{ fontSize: '0.68rem', color: '#6b7280', alignSelf: 'center' }}>
+                          +{Object.keys(trackerData.learningWeights.numberBoosts).length - 12} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ═══════════════════════════════════════════════════════════
+                SECTION 5: RECENT DRAW HISTORY — last 10 draws with hit/miss
+                ═══════════════════════════════════════════════════════════ */}
+            {trackerData?.recentResults?.length > 0 && (
+              <div className="opt-tracker__section">
+                <div className="opt-tracker__section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                  onClick={() => setShowAllHistory(v => !v)}>
+                  <span>Draw History ({trackerData.analytics.resolvedSessions} games tracked)</span>
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{showAllHistory ? '▲ collapse' : '▼ expand'}</span>
+                </div>
+
+                {/* Quick summary bar - always visible */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  {trackerData.recentResults.slice(0, showAllHistory ? 10 : 5).map((rec, ri) => {
+                    const best = rec.outcome?.bestLineHits || 0;
+                    const met = rec.outcome?.goalMet;
+                    return (
+                      <div key={rec.id || ri} style={{
+                        flex: '1 1 auto', minWidth: 50, padding: '4px 6px', borderRadius: 6, textAlign: 'center',
+                        background: met ? '#10b98118' : '#ef444418',
+                        border: `1px solid ${met ? '#10b981' : '#ef4444'}33`,
+                      }}>
+                        <div style={{ fontSize: '0.65rem', color: '#9ca3af' }}>{rec.drawDate?.slice(5)}</div>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: met ? '#10b981' : '#ef4444' }}>{best}/{n}</div>
+                        <div style={{ fontSize: '0.6rem' }}>{met ? '✅' : '❌'}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Expanded detail view */}
+                {showAllHistory && (
+                  <div className="opt-tracker__sessions" style={{ maxHeight: 400, overflowY: 'auto', marginTop: 8 }}>
+                    {trackerData.recentResults.map((rec, ri) => {
+                      const best = rec.outcome?.bestLineHits || 0;
+                      const met = rec.outcome?.goalMet;
+                      if (!rec.outcome) return null;
+                      return (
+                        <div key={rec.id || ri} style={{
+                          margin: '4px 0', padding: '6px 8px', borderRadius: 6,
+                          background: met ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.06)',
+                          border: `1px solid ${met ? '#10b981' : '#ef4444'}22`,
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                            <span style={{ fontWeight: 600, fontSize: '0.78rem' }}>
+                              {met ? '✅' : '❌'} {rec.drawDate}
+                              {rec.meta?.source === 'lines_generator' && <span style={{ marginLeft: 4, fontSize: '0.65rem', background: '#3b82f6', color: '#fff', padding: '1px 4px', borderRadius: 3 }}>Lines</span>}
+                            </span>
+                            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: met ? '#10b981' : '#ef4444' }}>
+                              Best: {best}/{n}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                            Actual: {rec.outcome.actualNums.join(', ')}
+                            {rec.outcome.actualBonus != null && <span style={{ color: bonusColor, fontWeight: 700 }}> + {bonusLabel ? bonusLabel.split('(')[0].trim() : 'Bonus'}: {rec.outcome.actualBonus}</span>}
+                          </div>
+                          {rec.outcome.results.map((line, li) => (
+                            <div key={li} style={{ fontSize: '0.68rem', padding: '1px 0', display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <span style={{ color: '#6b7280', minWidth: 40 }}>L{li+1}:</span>
+                              {rec.combos[li]?.nums.map((num, ni) => (
+                                <span key={ni} style={{
+                                  padding: '1px 4px', borderRadius: 3, fontWeight: 600, fontSize: '0.7rem',
+                                  background: line.hits.includes(Number(num)) ? '#10b981' : '#374151',
+                                  color: line.hits.includes(Number(num)) ? '#fff' : '#6b7280',
+                                }}>{num}</span>
+                              ))}
+                              {/* Bonus ball pick per line */}
+                              {line.bonusPick != null && (
+                                <span style={{
+                                  padding: '1px 4px', borderRadius: 3, fontWeight: 600, fontSize: '0.7rem',
+                                  background: line.bonusHit ? bonusColor : `${bonusColor}22`,
+                                  color: line.bonusHit ? '#fff' : '#6b7280',
+                                  border: `1px solid ${bonusColor}55`,
+                                }}>{line.bonusPick}</span>
+                              )}
+                              <span style={{
+                                marginLeft: 'auto', fontSize: '0.66rem', fontWeight: 700,
+                                color: line.hitCount >= 3 ? '#10b981' : line.hitCount >= 2 ? '#fbbf24' : '#ef4444',
+                              }}>
+                                {line.hitCount}/{n}
+                                {line.bonusHit && <span style={{ color: bonusColor }}> +B</span>}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Seeding progress indicator */}
+            {seedingStatus && (
+              <div style={{
+                margin: '8px 0', padding: '10px 14px', borderRadius: 8,
+                background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+                color: '#a5b4fc', fontSize: '0.82rem', textAlign: 'center',
+                border: '1px solid #6366f1',
+              }}>
+                <div style={{ fontSize: '1.2em', marginBottom: 4 }}>⚡</div>
+                {seedingStatus}
+                <div style={{ fontSize: '0.7rem', color: '#818cf8', marginTop: 4 }}>
+                  Generating predictions against recent draws to build hit/miss history and start learning...
+                </div>
+              </div>
+            )}
+
+            {/* Empty state — no data and not seeding */}
+            {!seedingStatus && (!trackerData || (trackerData.analytics.resolvedSessions === 0 && !trackerData.pendingPredictions?.length)) && (
+              <div className="opt-tracker__empty">
+                <div className="opt-tracker__empty-icon">📋</div>
+                <div className="opt-tracker__empty-text">
+                  No predictions tracked yet. Here's how it works:
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'left', maxWidth: 400, margin: '8px auto' }}>
+                  <div style={{ margin: '4px 0' }}>1. <strong>Generate predictions</strong> — Run Auto-Calibrate or Optimize</div>
+                  <div style={{ margin: '4px 0' }}>2. <strong>Wait for draw</strong> — Predictions are saved automatically</div>
+                  <div style={{ margin: '4px 0' }}>3. <strong>Reload data</strong> — After the draw, reload to see results</div>
+                  <div style={{ margin: '4px 0' }}>4. <strong>Hit/Miss report</strong> — See exactly what hit and missed</div>
+                  <div style={{ margin: '4px 0' }}>5. <strong>Learn & adjust</strong> — System learns and adjusts next predictions</div>
+                  <div style={{ margin: '4px 0' }}>6. <strong>Repeat</strong> — Each draw makes predictions smarter toward 3+ hits</div>
+                </div>
+              </div>
+            )}
+
+            {/* Clear tracker data button */}
+            {trackerData && (
+              <div className="opt-tracker__actions" style={{ marginTop: 8 }}>
+                <button
+                  className="opt-tracker__clear-btn"
+                  onClick={() => {
+                    if (window.confirm('Clear all tracker data for this game? This resets learning. Cannot be undone.')) {
+                      clearTracker(gameType, state, drawTypeStr);
+                      setTrackerData(null);
+                      setShowAllHistory(false);
+                      seedingRef.current = false; // allow re-seed
+                      setTrackerVersion(v => v + 1);
+                    }
+                  }}
+                >
+                  🗑️ Reset Learning & Clear Data
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
     </div>
   );

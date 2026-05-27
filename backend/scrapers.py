@@ -1464,6 +1464,9 @@ LOTTERYUSA_URL_MAP = {
     "sc_pick3":          "https://lotteryusa.com/south-carolina/pick-3/year",
     # Wisconsin
     "wi_pick3":          "https://lotteryusa.com/wisconsin/pick-3/year",
+    # ── Multi-state jackpot games ──
+    "mega_millions":     "https://lotteryusa.com/mega-millions/year",
+    "powerball":         "https://lotteryusa.com/powerball/year",
 }
 
 
@@ -2117,14 +2120,24 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
         if results:
             return results
         # Fallback to lotto.net
-        return await scrape_lotto_net("powerball", lottery_name, state_name, from_date, to_date)
+        results = await scrape_lotto_net("powerball", lottery_name, state_name, from_date, to_date)
+        if results:
+            return results
+        # Last resort: lotteryusa.com (~50 recent draws)
+        logger.info("Powerball: NY Open Data + lotto.net both failed, trying lotteryusa.com")
+        return await scrape_lotteryusa("powerball", lottery_name, state_name, from_date, to_date)
 
     # ── Mega Millions ──
     if lottery_id == "mega_millions":
         results = await scrape_ny_open_data("mega_millions", lottery_name, state_name, from_date, to_date)
         if results:
             return results
-        return await scrape_lotto_net("mega_millions", lottery_name, state_name, from_date, to_date)
+        results = await scrape_lotto_net("mega_millions", lottery_name, state_name, from_date, to_date)
+        if results:
+            return results
+        # Last resort: lotteryusa.com (~50 recent draws)
+        logger.info("Mega Millions: NY Open Data + lotto.net both failed, trying lotteryusa.com")
+        return await scrape_lotteryusa("mega_millions", lottery_name, state_name, from_date, to_date)
 
     # ── NY State Lotteries ──
     # Priority: NY Open Data (official) → lotteryusa.com (reliable) → lottery.net (full history)
