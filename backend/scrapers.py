@@ -378,13 +378,28 @@ def _parse_lotto_net_archive_items(soup: BeautifulSoup, lottery_id: str, lottery
         }
 
         # ── Fallback: if bonus ball wasn't detected but game should have one ──
-        # and we have more balls than expected, treat the extra as bonus
+        # Strategy 1: if more balls than expected, treat extra as bonus
         if not bonus_ball:
             expected_main = {"powerball": 5, "mega_millions": 5, "ca_superlotto_plus": 5}
             exp = expected_main.get(lottery_id, 0)
             if exp > 0 and len(balls) > exp:
                 bonus_ball = balls[exp]
                 balls = balls[:exp]
+        # Strategy 2: re-scan lis for any with bonus-like CSS class that we may have
+        # added to balls[] because text parsing didn't catch the label
+        if not bonus_ball and lottery_id in ("powerball", "mega_millions", "ca_superlotto_plus"):
+            expected = 5
+            for li in lis:
+                li_cls = ' '.join(li.get('class', [])).lower()
+                if any(kw in li_cls for kw in ('mega', 'power', 'bonus', 'special', 'extra')):
+                    num = re.sub(r'[^\d]', '', li.get_text(strip=True))
+                    if num:
+                        bonus_ball = fmt_ball(num)
+                        # Remove from balls[] if it was mistakenly added
+                        fb = fmt_ball(num)
+                        if fb in balls:
+                            balls.remove(fb)
+                        break
 
         # Map balls to columns based on lottery type
         if lottery_id == "powerball":
@@ -392,6 +407,8 @@ def _parse_lotto_net_archive_items(soup: BeautifulSoup, lottery_id: str, lottery
                 row[f"Ball_{i}"] = b
             if bonus_ball:
                 row["Powerball"] = bonus_ball
+            elif len(balls) >= 6:
+                row["Powerball"] = balls[5]
             if power_play:
                 row["Power_Play"] = power_play
 
@@ -400,6 +417,9 @@ def _parse_lotto_net_archive_items(soup: BeautifulSoup, lottery_id: str, lottery
                 row[f"Ball_{i}"] = b
             if bonus_ball:
                 row["Mega_Ball"] = bonus_ball
+            elif len(balls) >= 6:
+                # Fallback: 6th ball is the Mega Ball
+                row["Mega_Ball"] = balls[5]
             if power_play:
                 row["Megaplier"] = power_play
 
@@ -1499,8 +1519,8 @@ LOTTERYUSA_URL_MAP = {
     # Wisconsin
     "wi_pick3":          "https://lotteryusa.com/wisconsin/pick-3/year",
     # ── Multi-state jackpot games ──
-    "mega_millions":     "https://lotteryusa.com/mega-millions/year",
-    "powerball":         "https://lotteryusa.com/powerball/year",
+    "mega_millions":     "https://www.lotteryusa.com/mega-millions/year",
+    "powerball":         "https://www.lotteryusa.com/powerball/year",
 }
 
 
@@ -1549,8 +1569,23 @@ async def scrape_lotteryusa(lottery_id: str, lottery_name: str, state: str,
                 if draw_date > to_date or draw_date < from_date:
                     continue
 
-                balls = [b.get_text(strip=True) for b in card.select(".c-ball")
-                         if b.get_text(strip=True).isdigit()]
+                # Extract balls; detect bonus by CSS class (c-ball--yellow=Mega, c-ball--red=Powerball)
+                all_ball_els = card.select(".c-ball")
+                balls = []
+                css_bonus = None
+                for bel in all_ball_els:
+                    btxt = bel.get_text(strip=True)
+                    if not btxt.isdigit():
+                        continue
+                    bcls = ' '.join(bel.get('class', []))
+                    if 'c-ball--yellow' in bcls or 'c-ball--gold' in bcls or 'c-ball--mega' in bcls:
+                        css_bonus = btxt  # Mega Ball
+                    elif 'c-ball--red' in bcls and lottery_id in ('powerball',):
+                        css_bonus = btxt  # Powerball red ball
+                    else:
+                        balls.append(btxt)
+                # If CSS detection found a bonus, prepend it won't be in balls
+                # Otherwise fall through to count-based heuristic below
                 if not balls:
                     continue
 
@@ -1562,24 +1597,33 @@ async def scrape_lotteryusa(lottery_id: str, lottery_name: str, state: str,
                 }
 
                 # ── Separate bonus ball for jackpot games ──
-                # On lotteryusa, all balls come as sequential .c-ball elements.
-                # For jackpot games the last ball(s) are bonus/multiplier.
-                if lottery_id == "ca_superlotto_plus" and len(balls) >= 6:
+                # Use CSS-detected bonus if available, otherwise fall back to count-based heuristic
+                bonus_val = css_bonus  # may be None
+                if lottery_id == "ca_superlotto_plus":
+                    if not bonus_val and len(balls) >= 6:
+                        bonus_val = balls.pop(5)
                     for i, b in enumerate(balls[:5], 1):
                         row_dict[f"Ball_{i}"] = fmt_ball(b)
-                    row_dict["Mega"] = fmt_ball(balls[5])
-                elif lottery_id == "powerball" and len(balls) >= 6:
+                    if bonus_val:
+                        row_dict["Mega"] = fmt_ball(bonus_val)
+                elif lottery_id == "powerball":
+                    if not bonus_val and len(balls) >= 6:
+                        bonus_val = balls.pop(5)
                     for i, b in enumerate(balls[:5], 1):
                         row_dict[f"Ball_{i}"] = fmt_ball(b)
-                    row_dict["Powerball"] = fmt_ball(balls[5])
-                    if len(balls) >= 7:
-                        row_dict["Power_Play"] = str(balls[6])
-                elif lottery_id == "mega_millions" and len(balls) >= 6:
+                    if bonus_val:
+                        row_dict["Powerball"] = fmt_ball(bonus_val)
+                    if len(balls) >= 6:
+                        row_dict["Power_Play"] = str(balls[5])
+                elif lottery_id == "mega_millions":
+                    if not bonus_val and len(balls) >= 6:
+                        bonus_val = balls.pop(5)
                     for i, b in enumerate(balls[:5], 1):
                         row_dict[f"Ball_{i}"] = fmt_ball(b)
-                    row_dict["Mega_Ball"] = fmt_ball(balls[5])
-                    if len(balls) >= 7:
-                        row_dict["Megaplier"] = str(balls[6])
+                    if bonus_val:
+                        row_dict["Mega_Ball"] = fmt_ball(bonus_val)
+                    if len(balls) >= 6:
+                        row_dict["Megaplier"] = str(balls[5])
                 else:
                     for i, b in enumerate(balls, 1):
                         row_dict[f"Ball_{i}"] = _bf(b)
@@ -2164,14 +2208,18 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
     # ── Mega Millions ──
     if lottery_id == "mega_millions":
         results = await scrape_ny_open_data("mega_millions", lottery_name, state_name, from_date, to_date)
-        if results:
+        if results and any(r.get("Mega_Ball") for r in results):
             return results
         results = await scrape_lotto_net("mega_millions", lottery_name, state_name, from_date, to_date)
-        if results:
+        if results and any(r.get("Mega_Ball") for r in results):
             return results
-        # Last resort: lotteryusa.com (~50 recent draws)
-        logger.info("Mega Millions: NY Open Data + lotto.net both failed, trying lotteryusa.com")
-        return await scrape_lotteryusa("mega_millions", lottery_name, state_name, from_date, to_date)
+        # lotto.net may return draws without Mega Ball on some servers; try lotteryusa
+        logger.info("Mega Millions: bonus ball missing or sources failed, trying lotteryusa.com")
+        lusa = await scrape_lotteryusa("mega_millions", lottery_name, state_name, from_date, to_date)
+        if lusa and any(r.get("Mega_Ball") for r in lusa):
+            return lusa
+        # Return whatever we got (even without Mega Ball) rather than nothing
+        return results or lusa or []
 
     # ── NY State Lotteries ──
     # Priority: NY Open Data (official) → lotteryusa.com (reliable) → lottery.net (full history)
@@ -2309,6 +2357,34 @@ def build_csv_rows(results: List[Dict]) -> List[Dict]:
     """
     if not results:
         return []
+
+    # ── Safety net: ensure bonus balls for jackpot games ──────────────────
+    # If a jackpot game has 6+ Ball_N columns but NO bonus field,
+    # split the extra ball(s) into the correct bonus field.
+    _JACKPOT_BONUS = {
+        "powerball":          {"main": 5, "bonus_key": "Powerball"},
+        "mega_millions":      {"main": 5, "bonus_key": "Mega_Ball"},
+        "ca_superlotto_plus": {"main": 5, "bonus_key": "Mega"},
+    }
+    for r in results:
+        lid = r.get("Lottery_ID", "")
+        cfg = _JACKPOT_BONUS.get(lid)
+        if not cfg:
+            continue
+        # Already has bonus? skip
+        if r.get(cfg["bonus_key"]):
+            continue
+        # Count Ball_N columns
+        ball_keys = sorted(
+            [k for k in r if k.startswith("Ball_") and r[k]],
+            key=lambda x: int(x.split("_")[1])
+        )
+        if len(ball_keys) > cfg["main"]:
+            # Move the extra ball to bonus field
+            extra_key = ball_keys[cfg["main"]]
+            r[cfg["bonus_key"]] = r.pop(extra_key)
+            # Renumber remaining if there are even more (multiplier in Ball_7 etc.)
+            logger.debug(f"build_csv_rows: moved {extra_key}={r[cfg['bonus_key']]} to {cfg['bonus_key']} for {lid}")
 
     # Collect all column names
     ball_cols = set()
