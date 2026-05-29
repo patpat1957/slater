@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-#  Fly.io Configuration
+#  Fly.io Configuration — Lotto API v2.0 with ML Engine
 #  Deploy: fly launch → fly deploy
 # ─────────────────────────────────────────────────────────────
 app = "lotto-api"
@@ -7,6 +7,11 @@ primary_region = "iad"
 
 [build]
   dockerfile = "Dockerfile"
+
+[env]
+  ENV = "production"
+  ML_ENABLED = "true"
+  ML_MODEL_DIR = "/app/backend/ml_saved_models"
 
 [http_service]
   internal_port = 8000
@@ -17,13 +22,18 @@ primary_region = "iad"
   processes = ["app"]
 
 [[http_service.checks]]
-  grace_period = "10s"
+  grace_period = "20s"
   interval = "30s"
   method = "GET"
   path = "/health"
-  timeout = "5s"
+  timeout = "10s"
+
+# ML models need persistent storage
+[mounts]
+  source = "ml_models_data"
+  destination = "/app/backend/ml_saved_models"
 
 [[vm]]
-  memory = "512mb"
+  memory = "1024mb"       # 1GB for ML models (scikit-learn, numpy)
   cpu_kind = "shared"
   cpus = 1

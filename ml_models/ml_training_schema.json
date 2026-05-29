@@ -1,0 +1,595 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lottery ML Training Data Schema",
+  "description": "Schema for machine learning training data based on lottery ball states (Winner ON/OFF, Prediction ON/OFF, Best Practice ON/OFF) and 20 optimizer strategy features from LotteryOptimizerEngine.js",
+  "version": "1.0.0",
+  "type": "object",
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "source": {
+          "type": "string",
+          "const": "Lotto Extraction API v1.1.0 + LotteryOptimizerEngine.js"
+        },
+        "feature_count": {
+          "type": "integer"
+        },
+        "ball_states": {
+          "type": "object",
+          "description": "The three core ball states tracked per number per draw",
+          "properties": {
+            "winner_state": {
+              "description": "Was this ball number drawn in the actual draw?",
+              "type": "binary",
+              "values": {
+                "ON": 1,
+                "OFF": 0
+              },
+              "source": "actual draw results from API extraction"
+            },
+            "prediction_state": {
+              "description": "Did our model predict this ball number for this draw?",
+              "type": "binary",
+              "values": {
+                "ON": 1,
+                "OFF": 0
+              },
+              "source": "model output / optimizer pred5 lines"
+            },
+            "best_practice_state": {
+              "description": "Does this ball satisfy best-practice strategy filters?",
+              "type": "binary",
+              "values": {
+                "ON": 1,
+                "OFF": 0
+              },
+              "source": "checkCombination() pass/fail with 0 fails"
+            }
+          }
+        },
+        "supported_games": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "examples": [
+            "pick3",
+            "pick4",
+            "pick5",
+            "powerball",
+            "megamil",
+            "fantasy5",
+            "superlotto",
+            "cash5",
+            "lotto"
+          ]
+        },
+        "ml_targets": {
+          "type": "object",
+          "description": "Target variables for different ML tasks",
+          "properties": {
+            "classification": {
+              "type": "object",
+              "properties": {
+                "primary": {
+                  "const": "winner_state",
+                  "description": "Binary: will this number be drawn?"
+                },
+                "secondary": {
+                  "const": "best_practice_state",
+                  "description": "Binary: does this number pass strategy filters?"
+                }
+              }
+            },
+            "regression": {
+              "type": "object",
+              "properties": {
+                "score": {
+                  "const": "combo_score",
+                  "description": "Continuous: optimizer score from scoreCombo()"
+                },
+                "wf_hit_rate": {
+                  "const": "wf_hit_rate",
+                  "description": "Continuous: walk-forward hit rate"
+                }
+              }
+            },
+            "ranking": {
+              "type": "object",
+              "properties": {
+                "star_rating": {
+                  "const": "star_rating",
+                  "description": "Ordinal 1-5: combo quality rating"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "feature_definitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "dtype": {
+            "type": "string",
+            "enum": [
+              "string",
+              "int",
+              "float",
+              "binary",
+              "date"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "identity",
+              "ball_state",
+              "frequency",
+              "skip_recency",
+              "hot_cold",
+              "pair_cooccurrence",
+              "frequency_analysis",
+              "combo_level",
+              "ac_value",
+              "gap_analysis",
+              "sk123_rule",
+              "hcpl_ratio",
+              "start_end",
+              "pattern_group",
+              "game_status",
+              "backtest",
+              "star_rating",
+              "tracker",
+              "temporal"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "name": "draw_id",
+            "dtype": "string",
+            "description": "Unique draw identifier (state_game_date_drawtime)",
+            "category": "identity"
+          },
+          {
+            "name": "draw_date",
+            "dtype": "date",
+            "description": "Draw date YYYY-MM-DD",
+            "category": "identity"
+          },
+          {
+            "name": "state_code",
+            "dtype": "string",
+            "description": "2-letter US state code",
+            "category": "identity"
+          }
+        ]
+      }
+    },
+    "training_samples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "One row per ball-number per draw",
+        "properties": {
+          "draw_id": {
+            "type": "string"
+          },
+          "draw_date": {
+            "type": "string"
+          },
+          "state_code": {
+            "type": "string"
+          },
+          "game_type": {
+            "type": "string"
+          },
+          "draw_time": {
+            "type": "string"
+          },
+          "ball_position": {
+            "type": "number"
+          },
+          "ball_number": {
+            "type": "number"
+          },
+          "winner_state": {
+            "type": "number"
+          },
+          "prediction_state": {
+            "type": "number"
+          },
+          "best_practice_state": {
+            "type": "number"
+          },
+          "overall_freq": {
+            "type": "number"
+          },
+          "overall_freq_norm": {
+            "type": "number"
+          },
+          "temporal_decay_freq": {
+            "type": "number"
+          },
+          "positional_freq": {
+            "type": "number"
+          },
+          "positional_freq_norm": {
+            "type": "number"
+          },
+          "skip_value": {
+            "type": "number"
+          },
+          "skip_normalized": {
+            "type": "number"
+          },
+          "is_overdue": {
+            "type": "number"
+          },
+          "sa_level": {
+            "type": "number"
+          },
+          "is_hot": {
+            "type": "number"
+          },
+          "is_cold": {
+            "type": "number"
+          },
+          "is_warm": {
+            "type": "number"
+          },
+          "is_prime_digit": {
+            "type": "number"
+          },
+          "is_low_digit": {
+            "type": "number"
+          },
+          "avg_pair_cooccurrence": {
+            "type": "number"
+          },
+          "max_pair_cooccurrence": {
+            "type": "number"
+          },
+          "fa_level": {
+            "type": "number"
+          },
+          "in_fa_top30": {
+            "type": "number"
+          },
+          "in_fa_top50": {
+            "type": "number"
+          },
+          "combo_sum": {
+            "type": "number"
+          },
+          "combo_sum_in_range": {
+            "type": "number"
+          },
+          "combo_odd_count": {
+            "type": "number"
+          },
+          "combo_even_count": {
+            "type": "number"
+          },
+          "combo_oe_pattern": {
+            "type": "string"
+          },
+          "combo_oe_is_top2": {
+            "type": "number"
+          },
+          "combo_consec_sets": {
+            "type": "number"
+          },
+          "combo_consec_ok": {
+            "type": "number"
+          },
+          "combo_ac_value": {
+            "type": "number"
+          },
+          "combo_ac_in_range": {
+            "type": "number"
+          },
+          "combo_gap_conforms": {
+            "type": "number"
+          },
+          "min_gap": {
+            "type": "number"
+          },
+          "max_gap": {
+            "type": "number"
+          },
+          "avg_gap": {
+            "type": "number"
+          },
+          "combo_has_sk123": {
+            "type": "number"
+          },
+          "sk123_match_count": {
+            "type": "number"
+          },
+          "combo_hot_count": {
+            "type": "number"
+          },
+          "combo_cold_count": {
+            "type": "number"
+          },
+          "combo_prime_count": {
+            "type": "number"
+          },
+          "combo_low_count": {
+            "type": "number"
+          },
+          "combo_hcpl_ok": {
+            "type": "number"
+          },
+          "combo_start_num": {
+            "type": "number"
+          },
+          "combo_end_num": {
+            "type": "number"
+          },
+          "combo_start_ok": {
+            "type": "number"
+          },
+          "combo_end_ok": {
+            "type": "number"
+          },
+          "combo_spread": {
+            "type": "number"
+          },
+          "combo_pattern": {
+            "type": "string"
+          },
+          "combo_in_top27_pattern": {
+            "type": "number"
+          },
+          "combo_group": {
+            "type": "string"
+          },
+          "combo_in_top60_group": {
+            "type": "number"
+          },
+          "game_is_normal": {
+            "type": "number"
+          },
+          "game_unstable_count": {
+            "type": "number"
+          },
+          "wf_hit_rate": {
+            "type": "number"
+          },
+          "wf_hits": {
+            "type": "number"
+          },
+          "wf_total": {
+            "type": "number"
+          },
+          "star_rating": {
+            "type": "number"
+          },
+          "tracker_weight": {
+            "type": "number"
+          },
+          "tracker_hit_history": {
+            "type": "number"
+          },
+          "day_of_week": {
+            "type": "number"
+          },
+          "week_of_year": {
+            "type": "number"
+          },
+          "month": {
+            "type": "number"
+          },
+          "draws_since_jackpot": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "model_configs": {
+      "type": "object",
+      "description": "Recommended ML model configurations",
+      "properties": {
+        "xgboost": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "const": "binary_classification"
+            },
+            "target": {
+              "const": "winner_state"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "objective": {
+                  "const": "binary:logistic"
+                },
+                "eval_metric": {
+                  "const": "auc"
+                },
+                "max_depth": {
+                  "type": "integer",
+                  "default": 6
+                },
+                "learning_rate": {
+                  "type": "number",
+                  "default": 0.05
+                },
+                "n_estimators": {
+                  "type": "integer",
+                  "default": 500
+                },
+                "subsample": {
+                  "type": "number",
+                  "default": 0.8
+                },
+                "colsample_bytree": {
+                  "type": "number",
+                  "default": 0.8
+                },
+                "min_child_weight": {
+                  "type": "integer",
+                  "default": 5
+                },
+                "scale_pos_weight": {
+                  "type": "string",
+                  "default": "auto (n_negative/n_positive)"
+                }
+              }
+            }
+          }
+        },
+        "random_forest": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "const": "binary_classification"
+            },
+            "target": {
+              "const": "winner_state"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "n_estimators": {
+                  "type": "integer",
+                  "default": 300
+                },
+                "max_depth": {
+                  "type": "integer",
+                  "default": 12
+                },
+                "min_samples_split": {
+                  "type": "integer",
+                  "default": 10
+                },
+                "min_samples_leaf": {
+                  "type": "integer",
+                  "default": 5
+                },
+                "max_features": {
+                  "const": "sqrt"
+                },
+                "class_weight": {
+                  "const": "balanced"
+                }
+              }
+            }
+          }
+        },
+        "lightgbm": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "const": "binary_classification"
+            },
+            "target": {
+              "const": "winner_state"
+            },
+            "params": {
+              "type": "object",
+              "properties": {
+                "objective": {
+                  "const": "binary"
+                },
+                "metric": {
+                  "const": "auc"
+                },
+                "num_leaves": {
+                  "type": "integer",
+                  "default": 31
+                },
+                "learning_rate": {
+                  "type": "number",
+                  "default": 0.05
+                },
+                "n_estimators": {
+                  "type": "integer",
+                  "default": 500
+                },
+                "feature_fraction": {
+                  "type": "number",
+                  "default": 0.8
+                },
+                "bagging_fraction": {
+                  "type": "number",
+                  "default": 0.8
+                },
+                "is_unbalance": {
+                  "type": "boolean",
+                  "default": true
+                }
+              }
+            }
+          }
+        },
+        "neural_network": {
+          "type": "object",
+          "properties": {
+            "task": {
+              "const": "binary_classification"
+            },
+            "target": {
+              "const": "winner_state"
+            },
+            "architecture": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "const": "feedforward"
+                },
+                "layers": {
+                  "type": "array",
+                  "default": [
+                    128,
+                    64,
+                    32,
+                    1
+                  ]
+                },
+                "activation": {
+                  "const": "relu (hidden), sigmoid (output)"
+                },
+                "dropout": {
+                  "type": "number",
+                  "default": 0.3
+                },
+                "optimizer": {
+                  "const": "adam"
+                },
+                "loss": {
+                  "const": "binary_crossentropy"
+                },
+                "batch_size": {
+                  "type": "integer",
+                  "default": 256
+                },
+                "epochs": {
+                  "type": "integer",
+                  "default": 100
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

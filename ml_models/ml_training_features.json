@@ -1,0 +1,460 @@
+{
+  "features": [
+    {
+      "name": "draw_id",
+      "dtype": "string",
+      "description": "Unique draw identifier (state_game_date_drawtime)",
+      "category": "identity"
+    },
+    {
+      "name": "draw_date",
+      "dtype": "date",
+      "description": "Draw date YYYY-MM-DD",
+      "category": "identity"
+    },
+    {
+      "name": "state_code",
+      "dtype": "string",
+      "description": "2-letter US state code",
+      "category": "identity"
+    },
+    {
+      "name": "game_type",
+      "dtype": "string",
+      "description": "Game type: pick3/pick4/pick5/powerball/megamil/etc",
+      "category": "identity"
+    },
+    {
+      "name": "draw_time",
+      "dtype": "string",
+      "description": "midday or evening",
+      "category": "identity"
+    },
+    {
+      "name": "ball_position",
+      "dtype": "int",
+      "description": "Position index (0-based) in the draw",
+      "category": "identity"
+    },
+    {
+      "name": "ball_number",
+      "dtype": "int",
+      "description": "The actual ball number value",
+      "category": "identity"
+    },
+    {
+      "name": "winner_state",
+      "dtype": "binary",
+      "description": "1=drawn in actual result, 0=not drawn (TARGET for ML)",
+      "category": "ball_state"
+    },
+    {
+      "name": "prediction_state",
+      "dtype": "binary",
+      "description": "1=predicted by model, 0=not predicted",
+      "category": "ball_state"
+    },
+    {
+      "name": "best_practice_state",
+      "dtype": "binary",
+      "description": "1=passes all strategy filters, 0=fails one or more",
+      "category": "ball_state"
+    },
+    {
+      "name": "overall_freq",
+      "dtype": "float",
+      "description": "Raw frequency count across all history",
+      "category": "frequency"
+    },
+    {
+      "name": "overall_freq_norm",
+      "dtype": "float",
+      "description": "Normalized frequency (0-1 scale, divided by max)",
+      "category": "frequency"
+    },
+    {
+      "name": "temporal_decay_freq",
+      "dtype": "float",
+      "description": "Frequency with temporal decay lambda=0.02",
+      "category": "frequency"
+    },
+    {
+      "name": "positional_freq",
+      "dtype": "float",
+      "description": "Frequency at this specific ball position",
+      "category": "frequency"
+    },
+    {
+      "name": "positional_freq_norm",
+      "dtype": "float",
+      "description": "Normalized positional frequency (0-1)",
+      "category": "frequency"
+    },
+    {
+      "name": "skip_value",
+      "dtype": "int",
+      "description": "Draws since last appearance (0=appeared last draw)",
+      "category": "skip_recency"
+    },
+    {
+      "name": "skip_normalized",
+      "dtype": "float",
+      "description": "Skip / max_possible_skip (0-1)",
+      "category": "game_status"
+    },
+    {
+      "name": "is_overdue",
+      "dtype": "binary",
+      "description": "1 if skip > SA threshold for this game",
+      "category": "skip_recency"
+    },
+    {
+      "name": "sa_level",
+      "dtype": "int",
+      "description": "Which SA level (1-5) this number belongs to",
+      "category": "skip_recency"
+    },
+    {
+      "name": "is_hot",
+      "dtype": "binary",
+      "description": "1 if freq >= 60% of max frequency",
+      "category": "hot_cold"
+    },
+    {
+      "name": "is_cold",
+      "dtype": "binary",
+      "description": "1 if freq < 30% of max frequency and freq > 0",
+      "category": "hot_cold"
+    },
+    {
+      "name": "is_warm",
+      "dtype": "binary",
+      "description": "1 if between hot and cold thresholds",
+      "category": "hot_cold"
+    },
+    {
+      "name": "is_prime_digit",
+      "dtype": "binary",
+      "description": "1 if last digit is 2,3,5,7",
+      "category": "hot_cold"
+    },
+    {
+      "name": "is_low_digit",
+      "dtype": "binary",
+      "description": "1 if digit/last-digit is 0-4",
+      "category": "hot_cold"
+    },
+    {
+      "name": "avg_pair_cooccurrence",
+      "dtype": "float",
+      "description": "Average co-occurrence score with other drawn numbers",
+      "category": "pair_cooccurrence"
+    },
+    {
+      "name": "max_pair_cooccurrence",
+      "dtype": "float",
+      "description": "Max co-occurrence with any single other number",
+      "category": "pair_cooccurrence"
+    },
+    {
+      "name": "fa_level",
+      "dtype": "int",
+      "description": "Frequency Analysis level (1-4, 1=top 30%)",
+      "category": "frequency_analysis"
+    },
+    {
+      "name": "in_fa_top30",
+      "dtype": "binary",
+      "description": "1 if in top 30% frequency",
+      "category": "frequency_analysis"
+    },
+    {
+      "name": "in_fa_top50",
+      "dtype": "binary",
+      "description": "1 if in top 50% frequency",
+      "category": "frequency_analysis"
+    },
+    {
+      "name": "combo_sum",
+      "dtype": "int",
+      "description": "Sum of all drawn numbers",
+      "category": "combo_level"
+    },
+    {
+      "name": "combo_sum_in_range",
+      "dtype": "binary",
+      "description": "1 if sum within 85th percentile historical range",
+      "category": "combo_level"
+    },
+    {
+      "name": "combo_odd_count",
+      "dtype": "int",
+      "description": "Number of odd numbers in the draw",
+      "category": "combo_level"
+    },
+    {
+      "name": "combo_even_count",
+      "dtype": "int",
+      "description": "Number of even numbers in the draw",
+      "category": "combo_level"
+    },
+    {
+      "name": "combo_oe_pattern",
+      "dtype": "string",
+      "description": "Odd/Even pattern e.g. '3O/2E'",
+      "category": "pattern_group"
+    },
+    {
+      "name": "combo_oe_is_top2",
+      "dtype": "binary",
+      "description": "1 if O/E pattern matches top-2 historical",
+      "category": "combo_level"
+    },
+    {
+      "name": "combo_consec_sets",
+      "dtype": "int",
+      "description": "Number of consecutive number sets (e.g., 5-6 is 1 set)",
+      "category": "combo_level"
+    },
+    {
+      "name": "combo_consec_ok",
+      "dtype": "binary",
+      "description": "1 if consecutive sets <= 2 (PDF strategy)",
+      "category": "combo_level"
+    },
+    {
+      "name": "combo_ac_value",
+      "dtype": "int",
+      "description": "Arithmetic Complexity value",
+      "category": "ac_value"
+    },
+    {
+      "name": "combo_ac_in_range",
+      "dtype": "binary",
+      "description": "1 if AC within ideal range for this game",
+      "category": "ac_value"
+    },
+    {
+      "name": "combo_gap_conforms",
+      "dtype": "binary",
+      "description": "1 if gaps between numbers match 98% historical profile",
+      "category": "gap_analysis"
+    },
+    {
+      "name": "min_gap",
+      "dtype": "int",
+      "description": "Minimum gap between consecutive sorted numbers",
+      "category": "gap_analysis"
+    },
+    {
+      "name": "max_gap",
+      "dtype": "int",
+      "description": "Maximum gap between consecutive sorted numbers",
+      "category": "gap_analysis"
+    },
+    {
+      "name": "avg_gap",
+      "dtype": "float",
+      "description": "Average gap between consecutive sorted numbers",
+      "category": "gap_analysis"
+    },
+    {
+      "name": "combo_has_sk123",
+      "dtype": "binary",
+      "description": "1 if combo includes number from last 3 draws",
+      "category": "sk123_rule"
+    },
+    {
+      "name": "sk123_match_count",
+      "dtype": "int",
+      "description": "How many numbers from last 3 draws are in this combo",
+      "category": "sk123_rule"
+    },
+    {
+      "name": "combo_hot_count",
+      "dtype": "int",
+      "description": "Number of hot numbers in combo",
+      "category": "hcpl_ratio"
+    },
+    {
+      "name": "combo_cold_count",
+      "dtype": "int",
+      "description": "Number of cold numbers in combo",
+      "category": "hcpl_ratio"
+    },
+    {
+      "name": "combo_prime_count",
+      "dtype": "int",
+      "description": "Number of prime-digit numbers in combo",
+      "category": "hcpl_ratio"
+    },
+    {
+      "name": "combo_low_count",
+      "dtype": "int",
+      "description": "Number of low-digit numbers in combo",
+      "category": "hcpl_ratio"
+    },
+    {
+      "name": "combo_hcpl_ok",
+      "dtype": "binary",
+      "description": "1 if HCPL ratio within ideal historical range",
+      "category": "hcpl_ratio"
+    },
+    {
+      "name": "combo_start_num",
+      "dtype": "int",
+      "description": "First number in sorted combo",
+      "category": "start_end"
+    },
+    {
+      "name": "combo_end_num",
+      "dtype": "int",
+      "description": "Last number in sorted combo",
+      "category": "start_end"
+    },
+    {
+      "name": "combo_start_ok",
+      "dtype": "binary",
+      "description": "1 if start number in top-80% historical starts",
+      "category": "start_end"
+    },
+    {
+      "name": "combo_end_ok",
+      "dtype": "binary",
+      "description": "1 if end number in top-80% historical ends",
+      "category": "start_end"
+    },
+    {
+      "name": "combo_spread",
+      "dtype": "int",
+      "description": "End - Start (range of combo)",
+      "category": "start_end"
+    },
+    {
+      "name": "combo_pattern",
+      "dtype": "string",
+      "description": "L/M/H zone pattern e.g. 'L-L-M-H-H'",
+      "category": "pattern_group"
+    },
+    {
+      "name": "combo_in_top27_pattern",
+      "dtype": "binary",
+      "description": "1 if pattern is among top 27 historical",
+      "category": "pattern_group"
+    },
+    {
+      "name": "combo_group",
+      "dtype": "string",
+      "description": "Decade grouping e.g. '1-1-1-1-1'",
+      "category": "pattern_group"
+    },
+    {
+      "name": "combo_in_top60_group",
+      "dtype": "binary",
+      "description": "1 if group is among top 60 historical",
+      "category": "pattern_group"
+    },
+    {
+      "name": "game_is_normal",
+      "dtype": "binary",
+      "description": "1 if game in Normal status, 0 if Unstable",
+      "category": "game_status"
+    },
+    {
+      "name": "game_unstable_count",
+      "dtype": "int",
+      "description": "Number of recent draws outside expected ranges",
+      "category": "game_status"
+    },
+    {
+      "name": "wf_hit_rate",
+      "dtype": "float",
+      "description": "Walk-forward backtest hit rate (0-1)",
+      "category": "backtest"
+    },
+    {
+      "name": "wf_hits",
+      "dtype": "int",
+      "description": "Walk-forward hits out of test window",
+      "category": "backtest"
+    },
+    {
+      "name": "wf_total",
+      "dtype": "int",
+      "description": "Walk-forward test window size",
+      "category": "backtest"
+    },
+    {
+      "name": "star_rating",
+      "dtype": "int",
+      "description": "1-5 star rating from computeEnhancedStarRating",
+      "category": "star_rating"
+    },
+    {
+      "name": "tracker_weight",
+      "dtype": "float",
+      "description": "Adaptive learning weight from PredictionTracker",
+      "category": "tracker"
+    },
+    {
+      "name": "tracker_hit_history",
+      "dtype": "float",
+      "description": "Historical hit rate for this number from tracker",
+      "category": "tracker"
+    },
+    {
+      "name": "day_of_week",
+      "dtype": "int",
+      "description": "0=Mon, 6=Sun",
+      "category": "temporal"
+    },
+    {
+      "name": "week_of_year",
+      "dtype": "int",
+      "description": "1-52",
+      "category": "temporal"
+    },
+    {
+      "name": "month",
+      "dtype": "int",
+      "description": "1-12",
+      "category": "temporal"
+    },
+    {
+      "name": "draws_since_jackpot",
+      "dtype": "int",
+      "description": "Draws since last jackpot winner (if available)",
+      "category": "temporal"
+    }
+  ],
+  "total_features": 71,
+  "ball_states": {
+    "winner_state": {
+      "description": "Was this ball number drawn in the actual draw?",
+      "type": "binary",
+      "values": {
+        "ON": 1,
+        "OFF": 0
+      },
+      "source": "actual draw results from API extraction"
+    },
+    "prediction_state": {
+      "description": "Did our model predict this ball number for this draw?",
+      "type": "binary",
+      "values": {
+        "ON": 1,
+        "OFF": 0
+      },
+      "source": "model output / optimizer pred5 lines"
+    },
+    "best_practice_state": {
+      "description": "Does this ball satisfy best-practice strategy filters?",
+      "type": "binary",
+      "values": {
+        "ON": 1,
+        "OFF": 0
+      },
+      "source": "checkCombination() pass/fail with 0 fails"
+    }
+  }
+}

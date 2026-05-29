@@ -27,6 +27,7 @@ import httpx
 from lottery_config import LOTTERIES_BY_STATE, STATE_NAMES, LOTTERY_SOURCES
 from scrapers import fetch_lottery_results, build_csv_rows
 from stripe_routes import router as stripe_router
+from ml_routes import router as ml_router
 
 # ──────────────────────────────────────────────
 # Structured Logging
@@ -75,7 +76,7 @@ def _check_rate_limit(ip: str) -> bool:
 # ──────────────────────────────────────────────
 # App
 # ──────────────────────────────────────────────
-API_VERSION = "1.1.0"
+API_VERSION = "2.0.0"
 
 app = FastAPI(
     title="Lotto Extraction API",
@@ -121,6 +122,9 @@ app.add_middleware(
 
 # ── Stripe Router ──────────────────────────────
 app.include_router(stripe_router)
+
+# ── ML Router ──────────────────────────────────
+app.include_router(ml_router)
 
 # ── Security Headers + Request Tracking Middleware ────────────
 @app.middleware("http")
@@ -283,6 +287,17 @@ async def root():
             "GET /metrics": "Runtime metrics (request counts, response times, uptime)",
             "GET /docs": "Interactive API documentation (Swagger UI)",
             "GET /redoc": "Alternative API documentation",
+            # ML endpoints
+            "GET /ml/health": "ML subsystem health check",
+            "POST /ml/train": "Train ML models from CSV upload",
+            "POST /ml/train/from-api": "Train models using live Extraction API data",
+            "POST /ml/predict": "Get ball probability rankings for next draw",
+            "POST /ml/predict/lines": "Generate optimized prediction lines (pred5)",
+            "GET /ml/models": "List all registered ML models",
+            "GET /ml/models/{id}": "Get model details + metrics + feature importance",
+            "DELETE /ml/models/{id}": "Delete a model",
+            "GET /ml/features": "List all ML features and descriptions",
+            "POST /ml/backtest": "Run walk-forward backtesting",
         },
         "supported_states": len([s for s in LOTTERIES_BY_STATE.values() if s]),
         "total_lotteries": sum(
@@ -902,6 +917,21 @@ async def readiness_check():
     except Exception as e:
         checks["scrapers"] = {"status": "error", "detail": str(e)}
         ok = False
+
+    # Check ML subsystem
+    try:
+        from ml_engine import get_registry
+        registry = get_registry()
+        models = registry.list_models()
+        active = sum(1 for m in models if m.get("is_active"))
+        checks["ml_engine"] = {
+            "status": "ok",
+            "models_registered": len(models),
+            "models_active": active,
+        }
+    except Exception as e:
+        checks["ml_engine"] = {"status": "degraded", "detail": str(e)}
+        # ML is optional — don't fail readiness
 
     status_code = 200 if ok else 503
     return JSONResponse(
