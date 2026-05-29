@@ -1147,7 +1147,7 @@ if FRONTEND_BUILD.exists():
     async def serve_spa(full_path: str):
         API_PREFIXES = (
             "extract", "lotteries", "health", "docs", "redoc",
-            "openapi", "api/", "static/", "stripe/", "metrics",
+            "openapi", "api/", "static/", "stripe/", "metrics", "ml/",
         )
         if any(full_path.startswith(p) for p in API_PREFIXES):
             raise HTTPException(status_code=404, detail=f"API path not found: /{full_path}")
