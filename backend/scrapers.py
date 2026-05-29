@@ -310,18 +310,43 @@ def _parse_lotto_net_archive_items(soup: BeautifulSoup, lottery_id: str, lottery
             if not txt:
                 continue
 
-            # Check for special ball labels in text
+            li_classes = ' '.join(li.get('class', []))
+
+            # ── PRIMARY: Detect bonus/special balls by CSS class ──
+            # lotto.net uses classes like 'mega-ball', 'power-ball', 'bonus-ball'
+            if 'mega-ball' in li_classes or 'megaball' in li_classes:
+                num = re.sub(r'[^\d]', '', txt)
+                if num:
+                    bonus_ball = fmt_ball(num)
+                continue
+            if 'power-ball' in li_classes or 'powerball' in li_classes:
+                num = re.sub(r'[^\d]', '', txt)
+                if num:
+                    bonus_ball = fmt_ball(num)
+                continue
+            if 'bonus-ball' in li_classes or 'bonus' in li_classes:
+                num = re.sub(r'[^\d]', '', txt)
+                if num:
+                    bonus_ball = fmt_ball(num)
+                continue
+            if 'multiplier' in li_classes or 'megaplier' in li_classes or 'power-play' in li_classes:
+                num = re.sub(r'[^\d]', '', txt)
+                if num:
+                    power_play = fmt_ball(num)
+                continue
+
+            # ── FALLBACK: Detect bonus/special balls by text content ──
             if 'Powerball' in txt or 'PowerBall' in txt:
                 num = re.sub(r'[^\d]', '', txt.replace('Powerball', '').replace('PowerBall', ''))
                 if num:
                     bonus_ball = fmt_ball(num)
-            elif 'Mega' in txt and 'Megaplier' not in txt and 'MegaBall' not in txt and 'Mega Ball' not in txt:
-                # Could be Mega ball or Megaplier
-                num = re.sub(r'[^\d]', '', re.sub(r'Mega\w*', '', txt))
-                if num:
-                    bonus_ball = fmt_ball(num)
             elif 'MegaBall' in txt or 'Mega Ball' in txt:
                 num = re.sub(r'[^\d]', '', re.sub(r'Mega\s*Ball', '', txt))
+                if num:
+                    bonus_ball = fmt_ball(num)
+            elif 'Mega' in txt and 'Megaplier' not in txt:
+                # "7Mega" style text — extract digits before/after "Mega"
+                num = re.sub(r'[^\d]', '', re.sub(r'Mega\w*', '', txt))
                 if num:
                     bonus_ball = fmt_ball(num)
             elif 'Megaplier' in txt or 'multiplier' in txt.lower():
@@ -351,6 +376,15 @@ def _parse_lotto_net_archive_items(soup: BeautifulSoup, lottery_id: str, lottery
             "State": state,
             "Lottery_ID": lottery_id,
         }
+
+        # ── Fallback: if bonus ball wasn't detected but game should have one ──
+        # and we have more balls than expected, treat the extra as bonus
+        if not bonus_ball:
+            expected_main = {"powerball": 5, "mega_millions": 5, "ca_superlotto_plus": 5}
+            exp = expected_main.get(lottery_id, 0)
+            if exp > 0 and len(balls) > exp:
+                bonus_ball = balls[exp]
+                balls = balls[:exp]
 
         # Map balls to columns based on lottery type
         if lottery_id == "powerball":
