@@ -9,6 +9,7 @@ import Step2_DateRange      from './components/Step2_DateRange';
 import Step3_Results        from './components/Step3_Results';
 import LottoBall            from './components/LottoBall';
 import UniversalPredictor   from './components/UniversalPredictor';
+import HitMissDashboard     from './components/HitMissDashboard';
 
 /* ── Mobile ── */
 import MobileAppBanner  from './components/MobileAppBanner';
@@ -127,7 +128,7 @@ function AppInner() {
   } = useMonetization();
 
   /* ── top-level mode ── */
-  const [appMode, setAppMode] = useState('extractor'); // 'extractor' | 'predictor'
+  const [appMode, setAppMode] = useState('extractor'); // 'extractor' | 'predictor' | 'dashboard'
 
   /* ── Mobile app screen (shown once per session on mobile) ── */
   const [showMobileScreen, setShowMobileScreen] = useState(() => {
@@ -537,6 +538,12 @@ function AppInner() {
             >
               🔮 Predictor
             </button>
+            <button
+              className={`mode-btn mode-btn--dashboard${appMode === 'dashboard' ? ' mode-btn--active mode-btn--dashboard-active' : ''}`}
+              onClick={() => setAppMode('dashboard')}
+            >
+              📊 Dashboard
+            </button>
           </div>
 
           {/* ── Scoreboard CTA — always visible ── */}
@@ -564,6 +571,13 @@ function AppInner() {
       {appMode === 'predictor' && (
         <main className="main-content" style={{ paddingTop: 0 }}>
           <UniversalPredictor />
+        </main>
+      )}
+
+      {/* ══════════ DASHBOARD MODE ══════════ */}
+      {appMode === 'dashboard' && (
+        <main className="main-content" style={{ paddingTop: 0 }}>
+          <HitMissDashboard />
         </main>
       )}
 

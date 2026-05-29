@@ -9,6 +9,7 @@ export default function MobileBottomNav({ appMode, onModeChange }) {
   const tabs = [
     { id: 'extractor', icon: '📥', label: 'Extract' },
     { id: 'predictor', icon: '🔮', label: 'Predict' },
+    { id: 'dashboard', icon: '📊', label: 'Dashboard' },
     { id: 'scoreboard', icon: '🏆', label: 'Scores' },
   ];
 

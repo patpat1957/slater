@@ -48,3 +48,7 @@ mobile_*.js
 # Pytest
 .pytest_cache/
 backend/__pycache__/
+
+# ML saved models (generated at runtime, not checked in)
+backend/ml_saved_models/
+*.joblib
