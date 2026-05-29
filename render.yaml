@@ -1,22 +1,15 @@
 # ─────────────────────────────────────────────────────────────
-#  Render Blueprint — One-click deploy
-#  Lotto Extraction API v2.0 with ML Engine
+#  Render Blueprint — Lotto Extraction API v2.0 with ML Engine
 #  https://render.com/docs/blueprint-spec
-#
-#  IMPORTANT: This is a Python/FastAPI app, NOT Node.js.
-#  If Render auto-detects Node.js, change the runtime to Python
-#  in the Render Dashboard → Service Settings → Runtime.
 # ─────────────────────────────────────────────────────────────
 services:
   - type: web
     name: lotto-api
     runtime: python
-    plan: starter                # starter plan for ML (512MB RAM minimum)
     region: oregon
     branch: main
-    rootDir: ./
     buildCommand: pip install -r requirements.txt
-    startCommand: cd backend && gunicorn main:app --bind 0.0.0.0:$PORT --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --keep-alive 5 --access-logfile - --forwarded-allow-ips "*"
+    startCommand: cd backend && gunicorn main:app --bind 0.0.0.0:$PORT --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --keep-alive 5 --access-logfile -
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
@@ -27,11 +20,5 @@ services:
         value: "production"
       - key: ML_ENABLED
         value: "true"
-      - key: ML_MODEL_DIR
-        value: "/opt/render/project/src/backend/ml_saved_models"
       - key: WEB_CONCURRENCY
         value: "2"
-    disk:
-      name: ml-models
-      mountPath: /opt/render/project/src/backend/ml_saved_models
-      sizeGB: 1
