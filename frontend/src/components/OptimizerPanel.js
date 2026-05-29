@@ -10,6 +10,7 @@
  *   state     {string} two-letter state code
  */
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import axios from 'axios';
 import {
   OPTIMIZER_GAME_CONFIGS,
   convertDrawsToEntries,
@@ -230,18 +231,93 @@ function ProgressBar({ pct }) {
   );
 }
 
+// ─── ML Game Type Mapping ──────────────────────────────────────────────────
+const ML_GAME_MAP = {
+  powerball: 'powerball', megamil: 'mega_millions', fantasy5: 'fantasy5',
+  pick3: 'pick3', pick4: 'pick4', pick5: 'pick5', lotto647: 'lotto647',
+  lotto: 'lotto', superlotto: 'ca_superlotto_plus', cash5: 'cash5',
+  daily4: 'daily4', cash3: 'cash3',
+};
+
 // ─── Optimizer Position Table ──────────────────────────────────────────────
 // Shows per-position number frequency so user can manually build combos
 // Also shows which numbers are "hot" at each position for the next draw
+// ML integration: fetches ML probability scores from /ml/position-analysis
 // bonusPool: pool size for the bonus ball (e.g. 26 for Powerball red ball)
 // bonusLabel: display name for the bonus ball column
 // bonusHist: [{nums}] where nums[0] is the bonus ball value
 // lastBonusNum: the bonus ball value from the most recent draw
 function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, lastDrawNums,
-                                   bonusPool = 0, bonusLabel = '', bonusHist = [], lastBonusNum = null }) {
+                                   bonusPool = 0, bonusLabel = '', bonusHist = [], lastBonusNum = null,
+                                   draws = [], gameType = '' }) {
   const [showAll, setShowAll] = useState(false);
-  const [selectedNums, setSelectedNums] = useState(Array(n).fill(null)); // user-selected number per position
-  const [selectedBonus, setSelectedBonus] = useState(null); // selected bonus ball
+  const [selectedNums, setSelectedNums] = useState(Array(n).fill(null));
+  const [selectedBonus, setSelectedBonus] = useState(null);
+
+  // ── ML Analysis State ──
+  const [mlData, setMlData]       = useState(null);   // full ML response
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlError, setMlError]     = useState(null);
+  const [mlEnabled, setMlEnabled] = useState(false);   // toggle ML overlay on/off
+
+  // ── ML probability lookup maps (built from mlData) ──
+  const mlProbMap = useMemo(() => {
+    if (!mlData || !mlData.predictions) return {};
+    const m = {};
+    mlData.predictions.forEach(p => { m[p.ball_number] = p; });
+    return m;
+  }, [mlData]);
+
+  const mlPosRecs = useMemo(() => {
+    if (!mlData || !mlData.position_recommendations) return {};
+    const m = {};
+    mlData.position_recommendations.forEach(pr => {
+      const topSet = new Set();
+      (pr.top_picks || []).slice(0, 5).forEach(tp => topSet.add(tp.ball_number));
+      m[pr.position - 1] = { topSet, picks: pr.top_picks || [] };
+    });
+    return m;
+  }, [mlData]);
+
+  const mlBonusMap = useMemo(() => {
+    if (!mlData || !mlData.bonus_predictions) return {};
+    const m = {};
+    mlData.bonus_predictions.forEach(p => { m[p.ball_number] = p; });
+    return m;
+  }, [mlData]);
+
+  // ── Fetch ML Analysis ──
+  const runMlAnalysis = useCallback(async () => {
+    if (mlLoading) return;
+    if (!draws || draws.length < 20) {
+      setMlError('Need at least 20 draws for ML analysis.');
+      return;
+    }
+    setMlLoading(true);
+    setMlError(null);
+    try {
+      const mlGameType = ML_GAME_MAP[gameType] || gameType;
+      const payload = {
+        game_type: mlGameType,
+        pool_size: poolSize,
+        num_balls: n,
+        bonus_pool: bonusPool,
+        draws: draws.map(d => ({
+          date: d.date || '',
+          numbers: (d.numbers || []).map(Number),
+          bonus: d.bonus != null ? Number(d.bonus) : undefined,
+        })),
+      };
+      const resp = await axios.post('/ml/position-analysis', payload, { timeout: 60000 });
+      setMlData(resp.data);
+      setMlEnabled(true);
+    } catch (e) {
+      const msg = e.response?.data?.detail || e.message || 'ML analysis failed';
+      setMlError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setMlLoading(false);
+    }
+  }, [draws, gameType, poolSize, n, bonusPool, mlLoading]);
 
   // Compute per-position frequency from draw history (white balls only)
   const posFreq = React.useMemo(() => {
@@ -275,7 +351,7 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
     if (!bonusPool || !bonusHist || bonusHist.length === 0) return null;
     const freq = new Array(bonusPool).fill(0);
     bonusHist.forEach(e => {
-      const k = parseInt(e.nums[0]) - 1; // 1-based → 0-based
+      const k = parseInt(e.nums[0]) - 1;
       if (k >= 0 && k < bonusPool) freq[k]++;
     });
     return freq;
@@ -316,7 +392,6 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
       .filter(x => x.cnt > 0)
       .sort((a, b) => b.cnt - a.cnt)
       .slice(0, TOP_SHOW);
-    // relative bar: max frequency at this position = 100%
     const maxCnt = sorted.length > 0 ? sorted[0].cnt : 1;
     return sorted.map(x => ({ ...x, barPct: Math.round(x.cnt / maxCnt * 100) }));
   };
@@ -333,7 +408,7 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
           .map((c, idx) => ({ idx, c }))
           .sort((a, b) => b.c - a.c)
           .findIndex(x => x.idx === k);
-        const topN = Math.ceil(poolSize * 0.3); // top 30%
+        const topN = Math.ceil(poolSize * 0.3);
         if (sortedIdx !== -1 && sortedIdx < topN) {
           posMatches++;
           posScore += (topN - sortedIdx) / topN;
@@ -354,10 +429,13 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
   const selectedCombo = selectedNums.every(v => v !== null) ? selectedNums : null;
   const comboStarMatch = selectedCombo ? getComboStarMatch(selectedCombo) : null;
 
-  // Check if selected combo matches any optimizer result
   const matchedResult = selectedCombo && results ? [...(results.topPassing || []), ...(results.topNearMiss || [])].find(r =>
     r.combo.length === n && r.combo.every((v, i) => v === selectedCombo[i])
   ) : null;
+
+  // ── ML helper: get tier color ──
+  const mlTierColor = (tier) => tier === 'high' ? '#4ade80' : tier === 'medium' ? '#fbbf24' : '#64748b';
+  const mlTierIcon  = (tier) => tier === 'high' ? '\u26A1' : tier === 'medium' ? '\u25B2' : '';
 
   return (
     <div className="opt-pos-table-wrap">
@@ -368,21 +446,128 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
         </span>
         {bonusPool > 0 && (
           <span style={{ marginLeft: 8, fontSize: '0.72rem', color: '#f87171', background: 'rgba(239,68,68,0.12)', borderRadius: 5, padding: '2px 7px' }}>
-            + {bonusLabel || 'Bonus ball'} 1–{bonusPool}
+            + {bonusLabel || 'Bonus ball'} 1\u2013{bonusPool}
           </span>
         )}
       </div>
+
+      {/* ── ML Analysis Controls ── */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, margin: '8px 0 12px', padding: '8px 12px', background: 'rgba(139,92,246,0.08)', borderRadius: 10, border: '1px solid rgba(139,92,246,0.2)' }}>
+        <button
+          className="opt-btn"
+          style={{
+            background: mlData ? 'rgba(139,92,246,0.2)' : 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',
+            color: '#fff', border: 'none', borderRadius: 8, padding: '6px 14px', fontSize: '0.82rem',
+            cursor: mlLoading ? 'wait' : 'pointer', opacity: mlLoading ? 0.7 : 1,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+          onClick={runMlAnalysis}
+          disabled={mlLoading || draws.length < 20}
+          title={draws.length < 20 ? 'Load at least 20 draws first' : 'Run ML prediction engine on your draw history'}
+        >
+          {mlLoading ? '\u23F3 Analyzing...' : mlData ? '\U0001F504 Re-run ML' : '\U0001F916 Run ML Analysis'}
+        </button>
+        {mlData && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.78rem', color: '#c4b5fd', cursor: 'pointer' }}>
+            <input type="checkbox" checked={mlEnabled} onChange={e => setMlEnabled(e.target.checked)}
+              style={{ accentColor: '#7c3aed' }} />
+            Show ML scores
+          </label>
+        )}
+        {mlData && mlData.model_info && (
+          <span style={{ fontSize: '0.72rem', color: '#a78bfa', marginLeft: 'auto' }}>
+            {mlData.model_info.source === 'auto_trained' ? '\U0001F9E0 Auto-trained' :
+             mlData.model_info.source === 'existing' ? '\u2705 Pre-trained' : '\U0001F4CA Statistical'} model
+            {mlData.model_info.model_type ? ` (${mlData.model_info.model_type.replace('_', ' ')})` : ''}
+            {' \u00B7 '}{mlData.total_draws_analyzed || '?'} draws analyzed
+          </span>
+        )}
+        {mlError && (
+          <span style={{ fontSize: '0.72rem', color: '#f87171' }}>\u26A0\uFE0F {mlError}</span>
+        )}
+      </div>
+
+      {/* ── ML Hot / Cold Summary Panel ── */}
+      {mlData && mlEnabled && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', borderRadius: 10, padding: '8px 12px' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#4ade80', marginBottom: 4 }}>
+              \U0001F525 ML Hot Numbers (most likely)
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {(mlData.hot_numbers || []).slice(0, 10).map(h => (
+                <span key={h.ball_number} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  background: 'rgba(74,222,128,0.15)', border: '1px solid rgba(74,222,128,0.3)',
+                  borderRadius: 6, padding: '2px 8px', fontSize: '0.76rem', color: '#4ade80', fontWeight: 600,
+                }}>
+                  {h.ball_number}
+                  <span style={{ fontSize: '0.65rem', color: '#86efac', fontWeight: 400 }}>
+                    {(h.probability * 100).toFixed(1)}%
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+          <div style={{ background: 'rgba(100,116,139,0.08)', border: '1px solid rgba(100,116,139,0.25)', borderRadius: 10, padding: '8px 12px' }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', marginBottom: 4 }}>
+              \u2744\uFE0F ML Cold Numbers (least likely)
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {(mlData.cold_numbers || []).slice(0, 10).map(c => (
+                <span key={c.ball_number} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                  background: 'rgba(100,116,139,0.1)', border: '1px solid rgba(100,116,139,0.25)',
+                  borderRadius: 6, padding: '2px 8px', fontSize: '0.76rem', color: '#64748b',
+                }}>
+                  {c.ball_number}
+                  <span style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 400 }}>
+                    {(c.probability * 100).toFixed(1)}%
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+          {/* Bonus ball ML predictions */}
+          {bonusPool > 0 && mlData.bonus_predictions && mlData.bonus_predictions.length > 0 && (
+            <div style={{ gridColumn: '1 / -1', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 10, padding: '8px 12px' }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#f87171', marginBottom: 4 }}>
+                \U0001F534 ML {bonusLabel || 'Bonus Ball'} Predictions
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {mlData.bonus_predictions.slice(0, 10).map(bp => (
+                  <span key={bp.ball_number} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 3,
+                    background: bp.confidence_tier === 'high' ? 'rgba(248,113,113,0.15)' : 'rgba(100,116,139,0.1)',
+                    border: `1px solid ${bp.confidence_tier === 'high' ? 'rgba(248,113,113,0.35)' : 'rgba(100,116,139,0.2)'}`,
+                    borderRadius: 6, padding: '2px 8px', fontSize: '0.76rem',
+                    color: bp.confidence_tier === 'high' ? '#f87171' : '#94a3b8', fontWeight: bp.confidence_tier === 'high' ? 600 : 400,
+                  }}>
+                    {bp.ball_number}
+                    <span style={{ fontSize: '0.65rem', fontWeight: 400 }}>
+                      {(bp.probability * 100).toFixed(1)}%
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Instructions */}
       <div className="opt-pos-instructions">
         <div className="opt-pos-instr-title">📖 How to Build Combinations:</div>
         <ol className="opt-pos-instr-list">
-          <li>Look at each position column below — numbers are sorted by how often they appear at that position (P1–P{n} white balls, 1–{poolSize}).</li>
+          <li>Look at each position column below — numbers are sorted by how often they appear at that position (P1\u2013P{n} white balls, 1\u2013{poolSize}).</li>
           <li>Click a number in each position to select it (highlighted in yellow).</li>
           <li>Top numbers (green) are the most frequent at that position — <strong>best candidates for next draw.</strong></li>
+          {mlData && mlEnabled && (
+            <li>\U0001F916 <strong>Purple ML badges</strong> show machine learning probability scores. <strong>\u26A1</strong> marks ML top-5 picks per position.</li>
+          )}
           <li>Once you select one number per position, your custom combination appears below with its star match rating.</li>
           {bonusPool > 0 && (
-            <li>🔴 <strong>{bonusLabel || 'Bonus ball'} (1–{bonusPool})</strong> — shown in the red column on the right. Click to select your bonus ball. Hot bonus numbers (top 3) appear in green.</li>
+            <li>\U0001F534 <strong>{bonusLabel || 'Bonus ball'} (1\u2013{bonusPool})</strong> — shown in the red column on the right. Click to select your bonus ball. Hot bonus numbers (top 3) appear in green.</li>
           )}
           <li>Use <strong>Manual Combo Check</strong> below to verify your combination against all filters.</li>
           <li><strong>Star match</strong> measures how many of your selected numbers are in the top 30% for their position.</li>
@@ -394,6 +579,7 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
         {Array.from({ length: n }, (_, pi) => {
           const topNums = getTopNums(pi);
           const lastNum = lastDrawNums[pi];
+          const posRec = mlPosRecs[pi]; // ML position recommendation data
           return (
             <div key={pi} className="opt-pos-col">
               <div className="opt-pos-col__head">
@@ -412,6 +598,8 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
                   const isLast  = String(dispNum) === String(lastNum);
                   const skip    = posSkip ? posSkip[pi][item.k] : null;
                   const isSelected = selectedNums[pi] === dispNum;
+                  const mlInfo  = mlEnabled ? mlProbMap[dispNum] : null;
+                  const isMlTop = mlEnabled && posRec && posRec.topSet && posRec.topSet.has(dispNum);
                   return (
                     <div
                       key={item.k}
@@ -421,19 +609,31 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
                         isTop10  ? 'opt-pos-num--top10' : '',
                         isLast   ? 'opt-pos-num--last'  : '',
                         isSelected ? 'opt-pos-num--selected' : '',
+                        isMlTop  ? 'opt-pos-num--ml-top' : '',
                       ].join(' ').trim()}
                       onClick={() => handleSelectNum(pi, dispNum)}
-                      title={`${dispNum} appeared ${item.cnt}x at position ${pi+1} (${item.pct.toFixed(1)}% of draws)${skip !== null && skip < allHist.length ? ` · Last seen: ${skip} draws ago` : ''}`}
+                      title={`${dispNum} appeared ${item.cnt}x at position ${pi+1} (${item.pct.toFixed(1)}% of draws)${skip !== null && skip < allHist.length ? ` \u00B7 Last seen: ${skip} draws ago` : ''}${mlInfo ? ` \u00B7 ML: ${(mlInfo.probability*100).toFixed(1)}% (${mlInfo.confidence_tier})` : ''}`}
                     >
+                      {isMlTop && <span style={{ position: 'absolute', left: 1, top: 0, fontSize: '0.55rem', lineHeight: 1 }} title="ML top-5 pick for this position">{'\u26A1'}</span>}
                       <span className="opt-pos-num__digit">{dispNum}</span>
                       <span className="opt-pos-num__bar">
                         <span className="opt-pos-num__fill" style={{ width: `${item.barPct}%`, minWidth: 2 }} />
                       </span>
-                      <span className="opt-pos-num__cnt">{item.cnt}×</span>
+                      <span className="opt-pos-num__cnt">{item.cnt}\u00D7</span>
                       <span className="opt-pos-num__pct">{item.pct.toFixed(0)}%</span>
+                      {mlInfo && mlEnabled && (
+                        <span style={{
+                          fontSize: '0.6rem', fontWeight: 600, padding: '1px 4px', borderRadius: 4, marginLeft: 2, whiteSpace: 'nowrap',
+                          background: mlInfo.confidence_tier === 'high' ? 'rgba(139,92,246,0.25)' : mlInfo.confidence_tier === 'medium' ? 'rgba(139,92,246,0.12)' : 'rgba(100,116,139,0.12)',
+                          color: mlInfo.confidence_tier === 'high' ? '#c4b5fd' : mlInfo.confidence_tier === 'medium' ? '#a78bfa' : '#64748b',
+                          border: `1px solid ${mlInfo.confidence_tier === 'high' ? 'rgba(139,92,246,0.4)' : 'rgba(139,92,246,0.15)'}`,
+                        }} title={`ML rank #${mlInfo.rank} \u00B7 ${mlInfo.confidence_tier} confidence`}>
+                          {mlTierIcon(mlInfo.confidence_tier)}{(mlInfo.probability*100).toFixed(0)}%
+                        </span>
+                      )}
                       {skip !== null && skip < allHist.length && skip <= 5 && (
                         <span className="opt-pos-num__skip" title={skip === 0 ? 'Drawn in last draw at this position' : `Last seen ${skip} draw${skip !== 1 ? 's' : ''} ago at this position`}>
-                          {skip === 0 ? '↺now' : `↺${skip}`}
+                          {skip === 0 ? '\u21BAnow' : `\u21BA${skip}`}
                         </span>
                       )}
                     </div>
@@ -441,7 +641,7 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
                 })}
                 {posFreq[pi].filter(c => c > 0).length > TOP_SHOW && !showAll && (
                   <div className="opt-pos-more" onClick={() => setShowAll(true)}>
-                    +{posFreq[pi].filter(c => c > 0).length - TOP_SHOW} more…
+                    +{posFreq[pi].filter(c => c > 0).length - TOP_SHOW} more\u2026
                   </div>
                 )}
               </div>
@@ -454,7 +654,7 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
           <div className="opt-pos-col opt-pos-col--bonus">
             <div className="opt-pos-col__head">
               <span className="opt-pos-label opt-pos-label--bonus">
-                {bonusLabel || '🔴 Bonus'}
+                {bonusLabel || '\U0001F534 Bonus'}
               </span>
               {lastBonusNum != null && (
                 <span className="opt-pos-last" title="Last draw bonus ball">
@@ -464,12 +664,13 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
             </div>
             <div className="opt-pos-nums">
               {getBonusTopNums(showAll).map((item, rank) => {
-                const dispNum = item.k + 1; // always 1-based
+                const dispNum = item.k + 1;
                 const isTop3  = rank < 3;
                 const isTop5  = rank < 5;
                 const isLast  = String(dispNum) === String(lastBonusNum);
                 const skip    = bonusSkip ? bonusSkip[item.k] : null;
                 const isSelected = selectedBonus === dispNum;
+                const mlBonus = mlEnabled ? mlBonusMap[dispNum] : null;
                 return (
                   <div
                     key={item.k}
@@ -481,17 +682,27 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
                       isSelected ? 'opt-pos-num--selected' : '',
                     ].join(' ').trim()}
                     onClick={() => setSelectedBonus(prev => prev === dispNum ? null : dispNum)}
-                    title={`${dispNum} drawn ${item.cnt}x as bonus ball (${item.pct.toFixed(1)}%)${skip !== null && skip < bonusHist.length ? ` · Last: ${skip} draws ago` : ''}`}
+                    title={`${dispNum} drawn ${item.cnt}x as bonus ball (${item.pct.toFixed(1)}%)${skip !== null && skip < bonusHist.length ? ` \u00B7 Last: ${skip} draws ago` : ''}${mlBonus ? ` \u00B7 ML: ${(mlBonus.probability*100).toFixed(1)}%` : ''}`}
                   >
                     <span className="opt-pos-num__digit">{dispNum}</span>
                     <span className="opt-pos-num__bar">
                       <span className="opt-pos-num__fill opt-pos-num__fill--bonus" style={{ width: `${item.barPct}%`, minWidth: 2 }} />
                     </span>
-                    <span className="opt-pos-num__cnt">{item.cnt}×</span>
+                    <span className="opt-pos-num__cnt">{item.cnt}\u00D7</span>
                     <span className="opt-pos-num__pct">{item.pct.toFixed(0)}%</span>
+                    {mlBonus && mlEnabled && (
+                      <span style={{
+                        fontSize: '0.6rem', fontWeight: 600, padding: '1px 4px', borderRadius: 4, marginLeft: 2,
+                        background: mlBonus.confidence_tier === 'high' ? 'rgba(248,113,113,0.2)' : 'rgba(100,116,139,0.1)',
+                        color: mlBonus.confidence_tier === 'high' ? '#fca5a5' : '#94a3b8',
+                        border: `1px solid ${mlBonus.confidence_tier === 'high' ? 'rgba(248,113,113,0.3)' : 'rgba(100,116,139,0.15)'}`,
+                      }} title={`ML bonus rank #${mlBonus.rank}`}>
+                        {mlBonus.confidence_tier === 'high' ? '\u26A1' : ''}{(mlBonus.probability*100).toFixed(0)}%
+                      </span>
+                    )}
                     {skip !== null && skip < bonusHist.length && skip <= 5 && (
                       <span className="opt-pos-num__skip" title={skip === 0 ? 'Drawn as bonus in last draw' : `Last drawn as bonus ${skip} draw${skip !== 1 ? 's' : ''} ago`}>
-                        {skip === 0 ? '↺now' : `↺${skip}`}
+                        {skip === 0 ? '\u21BAnow' : `\u21BA${skip}`}
                       </span>
                     )}
                   </div>
@@ -499,7 +710,7 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
               })}
               {bonusFreq.filter(c => c > 0).length > 15 && !showAll && (
                 <div className="opt-pos-more" onClick={() => setShowAll(true)}>
-                  +{bonusFreq.filter(c => c > 0).length - 15} more…
+                  +{bonusFreq.filter(c => c > 0).length - 15} more\u2026
                 </div>
               )}
             </div>
@@ -509,17 +720,18 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
 
       {/* Legend */}
       <div className="opt-pos-legend">
-        <span className="opt-pos-legend-item opt-pos-legend--top3">■ Top 3 (hottest)</span>
-        <span className="opt-pos-legend-item opt-pos-legend--top10">■ Top 10</span>
-        <span className="opt-pos-legend-item opt-pos-legend--last">■ Last draw number</span>
-        <span className="opt-pos-legend-item opt-pos-legend--selected">■ Your selection</span>
-        {bonusPool > 0 && <span className="opt-pos-legend-item opt-pos-legend--bonus">■ Bonus ball (1–{bonusPool})</span>}
-        <span className="opt-pos-legend-item" style={{ color: '#94a3b8' }}>↺now = drawn last time at this position · ↺N = N draws ago</span>
+        <span className="opt-pos-legend-item opt-pos-legend--top3">\u25A0 Top 3 (hottest)</span>
+        <span className="opt-pos-legend-item opt-pos-legend--top10">\u25A0 Top 10</span>
+        <span className="opt-pos-legend-item opt-pos-legend--last">\u25A0 Last draw number</span>
+        <span className="opt-pos-legend-item opt-pos-legend--selected">\u25A0 Your selection</span>
+        {bonusPool > 0 && <span className="opt-pos-legend-item opt-pos-legend--bonus">\u25A0 Bonus ball (1\u2013{bonusPool})</span>}
+        {mlData && mlEnabled && <span className="opt-pos-legend-item" style={{ color: '#c4b5fd' }}>\u26A1 ML top pick \u00B7 <span style={{ background: 'rgba(139,92,246,0.25)', borderRadius: 3, padding: '0 4px', fontSize: '0.68rem' }}>N%</span> ML probability</span>}
+        <span className="opt-pos-legend-item" style={{ color: '#94a3b8' }}>\u21BAnow = drawn last time at this position \u00B7 \u21BAN = N draws ago</span>
       </div>
 
       {/* Selected combo display */}
       <div className="opt-pos-combo-builder">
-        <div className="opt-pos-combo-title">🎯 Your Combination:</div>
+        <div className="opt-pos-combo-title">\U0001F3AF Your Combination:</div>
         <div className="opt-pos-combo-row">
           {Array.from({ length: n }, (_, pi) => (
             <div key={pi} className={`opt-pos-combo-slot ${selectedNums[pi] !== null ? 'opt-pos-combo-slot--filled' : 'opt-pos-combo-slot--empty'}`}>
@@ -531,7 +743,7 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
               className={`opt-pos-combo-slot opt-pos-combo-slot--bonus ${selectedBonus !== null ? 'opt-pos-combo-slot--bonus-filled' : 'opt-pos-combo-slot--empty'}`}
               title={bonusLabel || 'Bonus ball'}
             >
-              {selectedBonus !== null ? selectedBonus : '🔴?'}
+              {selectedBonus !== null ? selectedBonus : '\U0001F534?'}
             </div>
           )}
           {selectedCombo && (
@@ -540,12 +752,21 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
                 <div className="opt-pos-combo-stars">
                   <span title={`${comboStarMatch.posMatches}/${n} positions in top 30%`}>
                     {Array.from({ length: 5 }, (_, i) => (
-                      <span key={i} style={{ color: i < Math.round(comboStarMatch.posMatches / n * 5) ? '#fbbf24' : '#475569' }}>★</span>
+                      <span key={i} style={{ color: i < Math.round(comboStarMatch.posMatches / n * 5) ? '#fbbf24' : '#475569' }}>\u2605</span>
                     ))}
                     <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginLeft: 4 }}>
                       {comboStarMatch.posMatches}/{n} hot positions
                     </span>
                   </span>
+                </div>
+              )}
+              {/* ML combo score */}
+              {mlData && mlEnabled && selectedCombo && (
+                <div style={{ fontSize: '0.72rem', color: '#c4b5fd', marginLeft: 6, display: 'flex', alignItems: 'center', gap: 3 }}>
+                  \U0001F916 ML:
+                  <strong style={{ color: '#a78bfa' }}>
+                    {(selectedCombo.reduce((sum, num) => sum + (mlProbMap[num]?.probability || 0), 0) / n * 100).toFixed(1)}%
+                  </strong> avg
                 </div>
               )}
               <button className="opt-btn opt-btn--check" style={{ marginLeft: 8, padding: '4px 10px', fontSize: '0.78rem' }}
@@ -560,7 +781,12 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
             {bonusLabel || 'Bonus ball'}: <strong>{selectedBonus}</strong>
             {bonusFreq && bonusFreq[selectedBonus - 1] !== undefined && (
               <span style={{ color: '#94a3b8', marginLeft: 8 }}>
-                (drawn {bonusFreq[selectedBonus - 1]}× · {bonusHist.length > 0 ? (bonusFreq[selectedBonus - 1] / bonusHist.length * 100).toFixed(1) : 0}%)
+                (drawn {bonusFreq[selectedBonus - 1]}\u00D7 \u00B7 {bonusHist.length > 0 ? (bonusFreq[selectedBonus - 1] / bonusHist.length * 100).toFixed(1) : 0}%)
+              </span>
+            )}
+            {mlEnabled && mlBonusMap[selectedBonus] && (
+              <span style={{ color: '#c4b5fd', marginLeft: 8, fontSize: '0.72rem' }}>
+                \U0001F916 ML: {(mlBonusMap[selectedBonus].probability * 100).toFixed(1)}%
               </span>
             )}
           </div>
@@ -568,8 +794,8 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
         {selectedCombo && matchedResult && (
           <div className="opt-pos-combo-match" style={{ color: matchedResult.fails.length === 0 ? '#4ade80' : '#fbbf24', marginTop: 4, fontSize: '0.8rem' }}>
             {matchedResult.fails.length === 0
-              ? `✅ This combo is in your PASSING results! (${getStarCount(matchedResult)}★)`
-              : `🔶 This combo is in Near-Miss results — fails: ${matchedResult.fails.join(', ')}`}
+              ? `\u2705 This combo is in your PASSING results! (${getStarCount(matchedResult)}\u2605)`
+              : `\U0001F536 This combo is in Near-Miss results \u2014 fails: ${matchedResult.fails.join(', ')}`}
           </div>
         )}
         {selectedCombo && !matchedResult && (
@@ -579,13 +805,13 @@ function OptimizerPositionTable({ allHist, n, poolSize, isNumGame, results, last
         )}
         {!selectedCombo && (
           <div style={{ color: '#64748b', fontSize: '0.75rem', marginTop: 4 }}>
-            Click one number per position to build a combination{bonusPool > 0 ? ` + bonus ball (1–${bonusPool})` : ''}
+            Click one number per position to build a combination{bonusPool > 0 ? ` + bonus ball (1\u2013${bonusPool})` : ''}
           </div>
         )}
       </div>
 
       {showAll && (
-        <button className="opt-pos-show-less" onClick={() => setShowAll(false)}>Show fewer numbers ▲</button>
+        <button className="opt-pos-show-less" onClick={() => setShowAll(false)}>Show fewer numbers \u25B2</button>
       )}
     </div>
   );
@@ -1535,6 +1761,8 @@ export default function OptimizerPanel({ draws = [], gameType = 'pick3', drawTim
               bonusLabel={bonusLabel}
               bonusHist={bonusHist}
               lastBonusNum={lastBonusNum}
+              draws={draws}
+              gameType={gameType}
             />
           </div>
 

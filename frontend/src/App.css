@@ -4633,6 +4633,7 @@ body::before {
   gap: 2px;
 }
 .opt-pos-num {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -4809,6 +4810,15 @@ body::before {
   background: rgba(239,68,68,0.2);
   font-size: 0.68rem;
 }
+/* ML top pick highlight — purple glow */
+.opt-pos-num--ml-top {
+  background: rgba(139,92,246,0.10) !important;
+  border-color: rgba(139,92,246,0.35) !important;
+}
+.opt-pos-num--ml-top .opt-pos-num__fill {
+  background: linear-gradient(90deg, #8b5cf6, #c4b5fd);
+}
+
 .opt-pos-num--bonus {
   /* inherits opt-pos-num base, just override fill color */
 }
