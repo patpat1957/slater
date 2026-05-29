@@ -601,3 +601,353 @@ async def run_backtest(
         "status": "backtest_complete",
         **result,
     }
+
+
+# ─────────────────────────────────────────────────────────────
+# ML Position Analysis (for Optimizer Table integration)
+# ─────────────────────────────────────────────────────────────
+
+class PositionAnalysisRequest(BaseModel):
+    game_type: str = Field(..., description="Game type: powerball, mega_millions, pick3, fantasy5, etc.")
+    pool_size: int = Field(..., ge=3, le=80, description="Number pool size (e.g. 69 for Powerball, 70 for Mega Millions)")
+    num_balls: int = Field(..., ge=2, le=10, description="Balls per draw (e.g. 5 for Powerball main)")
+    bonus_pool: int = Field(default=0, ge=0, le=50, description="Bonus ball pool size (e.g. 26 for Powerball, 25 for Mega Millions)")
+    draws: List[Dict[str, Any]] = Field(
+        ...,
+        description="Draw history: [{date, numbers: [int], bonus?: int}]",
+    )
+
+
+@router.post("/position-analysis", summary="ML-powered position analysis for Optimizer Table")
+async def ml_position_analysis(request: PositionAnalysisRequest):
+    """
+    Compute ML probability scores for every number in the pool, designed to
+    overlay on the Optimizer Position Table.
+
+    Flow:
+    1. If a trained model exists for this game_type, use it.
+    2. Otherwise, auto-train a lightweight model from the provided draws.
+    3. Return per-number probability rankings + confidence tiers + position recommendations.
+
+    Response includes:
+    - `predictions`: ranked list of {ball_number, probability, rank, confidence_tier}
+    - `hot_numbers`: top predicted numbers (ML says most likely)
+    - `cold_numbers`: bottom predicted numbers (ML says least likely)
+    - `position_recommendations`: for each position (P1..Pn), top ML-recommended numbers
+    - `bonus_predictions`: if bonus_pool > 0, ML predictions for bonus ball
+    - `model_info`: which model was used and its metrics
+    """
+    draws = request.draws
+    if len(draws) < 20:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Need at least 20 draws for ML analysis. Got {len(draws)}.",
+        )
+
+    registry = get_registry()
+    fe = get_feature_engineer()
+
+    # ── 1. Find or auto-train model ──
+    model_id = None
+    model_info = {}
+
+    # Check for existing active model
+    active_models = [
+        m for m in registry.list_models()
+        if m.get("game_type") == request.game_type
+        and m.get("is_active", True)
+    ]
+    if active_models:
+        active_models.sort(key=lambda m: m.get("created_at", ""), reverse=True)
+        model_id = active_models[0]["model_id"]
+        model_info = {
+            "model_id": model_id,
+            "model_type": active_models[0].get("model_type"),
+            "source": "existing",
+            "metrics": active_models[0].get("metrics", {}),
+            "training_rows": active_models[0].get("training_rows"),
+        }
+        logger.info(f"Using existing model {model_id} for {request.game_type}")
+    else:
+        # Auto-train from provided draws
+        if len(draws) < 50:
+            # Not enough for training — use statistical fallback
+            logger.info(f"Only {len(draws)} draws, using statistical ML fallback")
+            return _statistical_ml_fallback(request)
+
+        logger.info(f"Auto-training model for {request.game_type} from {len(draws)} draws...")
+        try:
+            df = fe.compute_features_from_draws(
+                draws=draws,
+                game_type=request.game_type,
+                pool_size=request.pool_size,
+                num_balls=request.num_balls,
+            )
+            trainer = get_trainer()
+            result = trainer.train(
+                df=df,
+                game_type=request.game_type,
+                state_code="ALL",
+                model_types=["random_forest"],
+                test_size=0.2,
+            )
+            model_id = result.get("models", [{}])[0].get("model_id") if result.get("models") else None
+            if model_id:
+                model_info = {
+                    "model_id": model_id,
+                    "model_type": "random_forest",
+                    "source": "auto_trained",
+                    "metrics": result.get("models", [{}])[0].get("metrics", {}),
+                    "training_rows": df.shape[0],
+                }
+        except Exception as e:
+            logger.warning(f"Auto-training failed: {e}, using statistical fallback")
+            return _statistical_ml_fallback(request)
+
+    if not model_id:
+        return _statistical_ml_fallback(request)
+
+    # ── 2. Compute features for prediction ──
+    try:
+        df = fe.compute_features_from_draws(
+            draws=draws,
+            game_type=request.game_type,
+            pool_size=request.pool_size,
+            num_balls=request.num_balls,
+        )
+        candidate_df = df.tail(request.pool_size)
+    except Exception as e:
+        logger.warning(f"Feature computation failed: {e}, using statistical fallback")
+        return _statistical_ml_fallback(request)
+
+    # ── 3. Predict ──
+    predictor = get_predictor()
+    try:
+        predictions = predictor.predict_next_draw(
+            model_id=model_id,
+            draw_features=candidate_df,
+            top_n=request.pool_size,  # get ALL numbers ranked
+        )
+    except Exception as e:
+        logger.warning(f"Prediction failed: {e}, using statistical fallback")
+        return _statistical_ml_fallback(request)
+
+    # ── 4. Build position recommendations ──
+    # For each draw position, compute which numbers ML recommends
+    position_recs = _compute_position_recommendations(
+        draws, request.num_balls, request.pool_size, predictions
+    )
+
+    # ── 5. Bonus ball predictions ──
+    bonus_predictions = []
+    if request.bonus_pool > 0:
+        bonus_predictions = _compute_bonus_predictions(
+            draws, request.bonus_pool
+        )
+
+    # ── 6. Categorize numbers ──
+    hot_numbers = [p for p in predictions if p["confidence_tier"] == "high"][:10]
+    cold_numbers = sorted(predictions, key=lambda p: p["probability"])[:10]
+
+    return {
+        "status": "success",
+        "game_type": request.game_type,
+        "pool_size": request.pool_size,
+        "num_balls": request.num_balls,
+        "total_draws_analyzed": len(draws),
+        "predictions": predictions,
+        "hot_numbers": hot_numbers,
+        "cold_numbers": cold_numbers,
+        "position_recommendations": position_recs,
+        "bonus_predictions": bonus_predictions,
+        "model_info": model_info,
+        "analysis_date": date.today().isoformat(),
+    }
+
+
+def _statistical_ml_fallback(request) -> Dict:
+    """
+    When ML training isn't possible (too few draws), use enhanced statistical
+    methods that mimic ML scoring: frequency decay, recency weighting, and
+    positional analysis to produce probability-like scores for each number.
+    """
+    draws = request.draws
+    pool_size = request.pool_size
+    num_balls = request.num_balls
+
+    # Compute frequency with temporal decay
+    freq = np.zeros(pool_size + 1)  # 1-indexed
+    recency = np.zeros(pool_size + 1)
+    total = len(draws)
+
+    for i, d in enumerate(draws):
+        weight = np.exp(-0.02 * (total - 1 - i))  # temporal decay
+        for n in d.get("numbers", []):
+            if isinstance(n, (int, float)) and 1 <= int(n) <= pool_size:
+                freq[int(n)] += weight
+                recency[int(n)] = max(recency[int(n)], i + 1)
+
+    # Normalize to probabilities
+    total_freq = freq.sum()
+    if total_freq > 0:
+        probs = freq / total_freq
+    else:
+        probs = np.ones(pool_size + 1) / pool_size
+
+    # Combine with recency score
+    max_recency = recency.max() if recency.max() > 0 else 1
+    recency_score = recency / max_recency
+
+    # Combined score: 60% frequency + 40% recency
+    combined = 0.6 * probs + 0.4 * recency_score / (recency_score.sum() or 1)
+    combined = combined / (combined.sum() or 1)  # renormalize
+
+    # Build predictions list
+    predictions = []
+    for ball in range(1, pool_size + 1):
+        prob = float(combined[ball])
+        predictions.append({
+            "ball_number": ball,
+            "probability": round(prob, 6),
+            "confidence_tier": "high" if prob >= np.percentile(combined[1:], 80) else
+                              "medium" if prob >= np.percentile(combined[1:], 50) else "low",
+        })
+
+    predictions.sort(key=lambda p: p["probability"], reverse=True)
+    for rank, p in enumerate(predictions, 1):
+        p["rank"] = rank
+        p["percentile"] = round(rank / pool_size * 100, 1)
+
+    # Position recommendations
+    position_recs = _compute_position_recommendations(
+        draws, num_balls, pool_size, predictions
+    )
+
+    # Bonus predictions
+    bonus_predictions = []
+    if request.bonus_pool > 0:
+        bonus_predictions = _compute_bonus_predictions(draws, request.bonus_pool)
+
+    hot_numbers = [p for p in predictions if p["confidence_tier"] == "high"][:10]
+    cold_numbers = sorted(predictions, key=lambda p: p["probability"])[:10]
+
+    return {
+        "status": "success",
+        "game_type": request.game_type,
+        "pool_size": pool_size,
+        "num_balls": num_balls,
+        "total_draws_analyzed": len(draws),
+        "predictions": predictions,
+        "hot_numbers": hot_numbers,
+        "cold_numbers": cold_numbers,
+        "position_recommendations": position_recs,
+        "bonus_predictions": bonus_predictions,
+        "model_info": {
+            "model_id": None,
+            "model_type": "statistical_fallback",
+            "source": "statistical",
+            "metrics": {"method": "temporal_decay_frequency + recency_weighting"},
+        },
+        "analysis_date": date.today().isoformat(),
+    }
+
+
+def _compute_position_recommendations(
+    draws: List[Dict], num_balls: int, pool_size: int, predictions: List[Dict]
+) -> List[Dict]:
+    """
+    For each draw position (P1..Pn), combine positional frequency with
+    ML probability to recommend the best numbers at each position.
+    """
+    # Build probability lookup
+    prob_map = {p["ball_number"]: p["probability"] for p in predictions}
+
+    # Compute per-position frequency
+    pos_freq = [np.zeros(pool_size + 1) for _ in range(num_balls)]
+    total = len(draws)
+
+    for i, d in enumerate(draws):
+        nums = d.get("numbers", [])
+        weight = np.exp(-0.015 * (total - 1 - i))  # lighter decay for positions
+        for pi in range(min(len(nums), num_balls)):
+            n = int(nums[pi]) if isinstance(nums[pi], (int, float, str)) and str(nums[pi]).isdigit() else 0
+            if 1 <= n <= pool_size:
+                pos_freq[pi][n] += weight
+
+    position_recs = []
+    for pi in range(num_balls):
+        # Normalize position frequency
+        pf = pos_freq[pi]
+        pf_sum = pf.sum()
+        if pf_sum > 0:
+            pf_norm = pf / pf_sum
+        else:
+            pf_norm = np.zeros_like(pf)
+
+        # Combined score: 50% positional frequency + 50% ML probability
+        scored = []
+        for ball in range(1, pool_size + 1):
+            ml_score = prob_map.get(ball, 0)
+            pos_score = float(pf_norm[ball])
+            combined = 0.5 * pos_score + 0.5 * ml_score
+            scored.append({
+                "ball_number": ball,
+                "ml_score": round(ml_score, 6),
+                "positional_score": round(pos_score, 6),
+                "combined_score": round(combined, 6),
+            })
+
+        scored.sort(key=lambda x: x["combined_score"], reverse=True)
+        # Add rank
+        for rank, s in enumerate(scored, 1):
+            s["rank"] = rank
+
+        position_recs.append({
+            "position": pi + 1,
+            "top_picks": scored[:15],  # top 15 per position
+        })
+
+    return position_recs
+
+
+def _compute_bonus_predictions(draws: List[Dict], bonus_pool: int) -> List[Dict]:
+    """
+    Compute ML-style predictions for the bonus ball using temporal decay frequency.
+    """
+    freq = np.zeros(bonus_pool + 1)
+    total = 0
+
+    for i, d in enumerate(draws):
+        bonus = d.get("bonus")
+        if bonus is not None:
+            try:
+                b = int(bonus)
+                if 1 <= b <= bonus_pool:
+                    weight = np.exp(-0.02 * (len(draws) - 1 - i))
+                    freq[b] += weight
+                    total += 1
+            except (ValueError, TypeError):
+                pass
+
+    # Normalize
+    freq_sum = freq.sum()
+    if freq_sum > 0:
+        probs = freq / freq_sum
+    else:
+        probs = np.ones(bonus_pool + 1) / bonus_pool
+
+    predictions = []
+    for ball in range(1, bonus_pool + 1):
+        prob = float(probs[ball])
+        predictions.append({
+            "ball_number": ball,
+            "probability": round(prob, 6),
+            "confidence_tier": "high" if prob >= np.percentile(probs[1:], 80) else
+                              "medium" if prob >= np.percentile(probs[1:], 50) else "low",
+        })
+
+    predictions.sort(key=lambda p: p["probability"], reverse=True)
+    for rank, p in enumerate(predictions, 1):
+        p["rank"] = rank
+
+    return predictions
