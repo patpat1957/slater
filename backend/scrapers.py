@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Key: domain or source name, Value: timestamp when the 403 was received
 import time as _time
 _403_cache = {}  # { 'ny_open_data': timestamp, 'lottery.net': timestamp, ... }
-_403_TTL = 600   # 10 minutes
+_403_TTL = 120   # 2 minutes (was 10min — too aggressive, causes cascading fallbacks)
 _error_cache = {}  # { 'lottery.net': {count: N, ts: timestamp} } — tracks consecutive errors
 _ERROR_TTL = 300   # 5 minutes cooldown after repeated errors
 _ERROR_THRESHOLD = 3  # consecutive errors before blocking
@@ -1646,7 +1646,7 @@ async def _supplement_deep_history(
 ) -> List[Dict]:
     """
     If lotteryusa returned too few results for the requested date range,
-    supplement from lottery.net year-based archives which have full history.
+    supplement from calottery.com API (official) or lottery.net year-based archives.
     Also supplements today's missing data if to_date is not present.
     Returns the merged (and de-duplicated) result list.
     """
@@ -1656,9 +1656,10 @@ async def _supplement_deep_history(
     requested_days = (to_date - from_date).days
     existing_dates = {r.get("Date") for r in results}
     has_to_date = str(to_date) in existing_dates
+    can_supplement = (lottery_id in LOTTERY_NET_CA_URL_MAP or lottery_id in CALOTTERY_GAME_IDS)
     need_full = (requested_days > 60 and len(results) < requested_days * 0.7
-                 and lottery_id in LOTTERY_NET_CA_URL_MAP)
-    need_today = (not has_to_date and lottery_id in LOTTERY_NET_CA_URL_MAP)
+                 and can_supplement)
+    need_today = (not has_to_date and can_supplement)
 
     if not need_full and not need_today:
         return results
@@ -1666,9 +1667,18 @@ async def _supplement_deep_history(
     sup_from = from_date if need_full else to_date
     reason = (f"{source_label} returned {len(results)} for {requested_days}-day range"
               if need_full else f"{source_label} missing {to_date}")
-    logger.info(f"{lottery_id}: {reason}, supplementing from lottery.net")
+    logger.info(f"{lottery_id}: {reason}, supplementing...")
 
-    supplement = await scrape_lottery_net_ca(lottery_id, lottery_name, state_name, sup_from, to_date)
+    supplement = []
+
+    # Try calottery.com API first (official, paginated, fast)
+    if lottery_id in CALOTTERY_GAME_IDS:
+        supplement = await scrape_calottery_api(lottery_id, lottery_name, state_name, sup_from, to_date)
+
+    # If calottery didn't work, try lottery.net
+    if not supplement and lottery_id in LOTTERY_NET_CA_URL_MAP:
+        supplement = await scrape_lottery_net_ca(lottery_id, lottery_name, state_name, sup_from, to_date)
+
     if supplement:
         for row in supplement:
             if row.get("Date") not in existing_dates:
@@ -1679,7 +1689,192 @@ async def _supplement_deep_history(
     return results
 
 
-# ── Louisiana CSV slug map ──
+# ── calottery.com Official API Scraper ────────────────────────────────────────
+# California Lottery official paginated JSON API — no scraping needed.
+# URL: https://www.calottery.com/api/DrawGameApi/DrawGamePastDrawResults/{game_id}/{page}/{page_size}
+# Returns full history with unlimited pagination.
+
+CALOTTERY_GAME_IDS = {
+    "ca_daily3":          4,
+    "ca_midday3":         4,   # Same game, filter by draw time
+    "ca_daily4":          5,
+    "ca_fantasy5":        7,
+    "ca_superlotto_plus": 8,
+    "ca_daily_derby":     9,
+    # Multi-state (fallback — primary source is NY Open Data)
+    "powerball":          12,
+    "mega_millions":      15,
+}
+
+# Draw time markers for midday vs evening
+CALOTTERY_DRAW_TIME = {
+    "ca_midday3": "Midday",
+    "ca_daily3":  "Evening",
+}
+
+
+async def scrape_calottery_api(lottery_id: str, lottery_name: str, state: str,
+                                from_date: date, to_date: date) -> List[Dict]:
+    """
+    Fetch California lottery results from the official calottery.com JSON API.
+    Supports full history with pagination (page_size up to 100).
+    Returns unlimited draws filtered by date range.
+    """
+    game_id = CALOTTERY_GAME_IDS.get(lottery_id)
+    if game_id is None:
+        logger.debug(f"calottery: No game ID for {lottery_id}")
+        return []
+
+    if _is_403_blocked('calottery'):
+        logger.debug(f"calottery 403-cached, skipping {lottery_id}")
+        return []
+
+    results = []
+    page = 1
+    page_size = 100  # Max per request
+    max_pages = 20   # Safety limit (~2000 draws max)
+    done = False
+
+    api_headers = {
+        **HEADERS,
+        "Accept": "application/json",
+        "Referer": "https://www.calottery.com/draw-games",
+    }
+
+    async with httpx.AsyncClient(headers=api_headers, timeout=20, follow_redirects=True) as client:
+        while not done and page <= max_pages:
+            url = f"https://www.calottery.com/api/DrawGameApi/DrawGamePastDrawResults/{game_id}/{page}/{page_size}"
+            try:
+                resp = await client.get(url)
+                if resp.status_code == 403:
+                    _mark_403('calottery')
+                    logger.warning(f"calottery: 403 for {lottery_id}")
+                    break
+                if resp.status_code != 200:
+                    logger.warning(f"calottery: {resp.status_code} for {lottery_id} page {page}")
+                    break
+
+                data = resp.json()
+                draws = data.get("PreviousDraws", [])
+                if not draws:
+                    done = True
+                    break
+
+                for draw in draws:
+                    row = _parse_calottery_draw(draw, lottery_id, lottery_name, state)
+                    if not row:
+                        continue
+                    draw_date_str = row.get("Date", "")
+                    try:
+                        draw_dt = date.fromisoformat(draw_date_str)
+                    except (ValueError, TypeError):
+                        continue
+
+                    if draw_dt < from_date:
+                        done = True
+                        break
+                    if draw_dt <= to_date:
+                        results.append(row)
+
+                page += 1
+                if len(draws) < page_size:
+                    done = True
+                else:
+                    await asyncio.sleep(0.3)  # Be polite
+
+            except Exception as e:
+                logger.error(f"calottery API error for {lottery_id} page {page}: {e}")
+                _mark_error('calottery')
+                break
+
+    if results:
+        _clear_errors('calottery')
+        logger.info(f"calottery API: {len(results)} draws for {lottery_id}")
+
+    return sorted(results, key=lambda x: x.get("Date", ""), reverse=True)
+
+
+def _parse_calottery_draw(draw: Dict, lottery_id: str, lottery_name: str, state: str) -> Optional[Dict]:
+    """Parse a single calottery.com API draw record."""
+    try:
+        raw_date = draw.get("DrawDate", "")
+        if not raw_date:
+            return None
+
+        # DrawDate format: "/Date(1716782400000)/" (epoch ms) or "2026-05-27T00:00:00"
+        if "/Date(" in raw_date:
+            epoch_ms = int(re.findall(r'\d+', raw_date)[0])
+            draw_date = datetime.utcfromtimestamp(epoch_ms / 1000).strftime("%Y-%m-%d")
+        elif "T" in raw_date:
+            draw_date = raw_date[:10]
+        else:
+            draw_date = raw_date[:10]
+
+        # Filter by draw time for midday/evening if needed
+        draw_time = CALOTTERY_DRAW_TIME.get(lottery_id)
+        if draw_time:
+            actual_time = draw.get("DrawTime", "") or draw.get("DrawName", "") or ""
+            if draw_time == "Midday" and "midday" not in actual_time.lower() and "mid" not in actual_time.lower():
+                # If API doesn't distinguish, accept all for now
+                pass
+            if draw_time == "Evening" and "midday" in actual_time.lower():
+                return None  # Skip midday draws for evening game
+
+        winning_numbers = draw.get("WinningNumbers", [])
+        if not winning_numbers:
+            return None
+
+        row = {
+            "Date": draw_date,
+            "Lotto_Name": lottery_name,
+            "State": state,
+            "Lottery_ID": lottery_id,
+        }
+
+        # Parse ball numbers
+        nums = []
+        for wn in winning_numbers:
+            if isinstance(wn, dict):
+                nums.append(str(wn.get("Number", "")))
+            elif isinstance(wn, (int, str)):
+                nums.append(str(wn))
+
+        # Assign balls based on game type
+        if lottery_id in ("ca_daily3", "ca_midday3"):
+            for i, n in enumerate(nums[:3], 1):
+                row[f"Ball_{i}"] = fmt_ball(n)
+        elif lottery_id == "ca_daily4":
+            for i, n in enumerate(nums[:4], 1):
+                row[f"Ball_{i}"] = fmt_ball(n)
+        elif lottery_id == "ca_fantasy5":
+            for i, n in enumerate(nums[:5], 1):
+                row[f"Ball_{i}"] = fmt_ball(n)
+        elif lottery_id == "ca_superlotto_plus":
+            for i, n in enumerate(nums[:5], 1):
+                row[f"Ball_{i}"] = fmt_ball(n)
+            if len(nums) >= 6:
+                row["Mega_Ball"] = fmt_ball(nums[5])
+        elif lottery_id == "powerball":
+            for i, n in enumerate(nums[:5], 1):
+                row[f"Ball_{i}"] = fmt_ball(n)
+            if len(nums) >= 6:
+                row["Powerball"] = fmt_ball(nums[5])
+        elif lottery_id == "mega_millions":
+            for i, n in enumerate(nums[:5], 1):
+                row[f"Ball_{i}"] = fmt_ball(n)
+            if len(nums) >= 6:
+                row["Mega_Ball"] = fmt_ball(nums[5])
+        else:
+            for i, n in enumerate(nums, 1):
+                row[f"Ball_{i}"] = fmt_ball(n)
+
+        return row
+
+    except Exception as e:
+        logger.debug(f"calottery parse error: {e}")
+        return None
+
+
 LA_CSV_SLUG_MAP = {
     "la_pick3":  "pick-3",
     "la_pick4":  "pick-4",
@@ -2088,21 +2283,31 @@ async def scrape_ny_open_data(lottery_id: str, lottery_name: str, state: str,
 
     results = []
     async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
-        try:
-            resp = await client.get(url, params=params)
-            if resp.status_code == 200:
-                data = resp.json()
-                for record in data:
-                    row = _parse_ny_open_data_record(record, lottery_id, lottery_name, state)
-                    if row:
-                        results.append(row)
-                logger.info(f"NY Open Data: {len(results)} records for {lottery_id}")
-            else:
-                logger.warning(f"NY Open Data returned {resp.status_code} for {lottery_id}")
-                if resp.status_code == 403:
-                    _mark_403('ny_open_data')
-        except Exception as e:
-            logger.error(f"Error fetching NY Open Data for {lottery_id}: {e}")
+        for attempt in range(2):  # Retry once on failure
+            try:
+                resp = await client.get(url, params=params)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for record in data:
+                        row = _parse_ny_open_data_record(record, lottery_id, lottery_name, state)
+                        if row:
+                            results.append(row)
+                    logger.info(f"NY Open Data: {len(results)} records for {lottery_id}")
+                    break  # Success
+                else:
+                    logger.warning(f"NY Open Data returned {resp.status_code} for {lottery_id} (attempt {attempt+1})")
+                    if resp.status_code == 403:
+                        if attempt == 0:
+                            await asyncio.sleep(2)  # Brief retry delay
+                            continue
+                        _mark_403('ny_open_data')
+                    break
+            except Exception as e:
+                logger.error(f"Error fetching NY Open Data for {lottery_id}: {e}")
+                if attempt == 0:
+                    await asyncio.sleep(1)
+                    continue
+                break
 
     return results
 
@@ -2241,27 +2446,39 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
         return []
 
     # ── CA Pick / Draw Games ──
-    # Priority: lotteryusa.com (reliable) → lottery.net (full history)
+    # Priority: calottery.com API (official, paginated, full history) → lotteryusa.com (reliable, ~50) → lottery.net
     # ca_pick3 is a legacy alias → routes to Evening draw
     if lottery_id in ("ca_daily3", "ca_pick3"):
+        results = await scrape_calottery_api("ca_daily3", lottery_name, state_name, from_date, to_date)
+        if results:
+            return results
         results = await scrape_lotteryusa("ca_daily3", lottery_name, state_name, from_date, to_date)
         if results:
             return await _supplement_deep_history(results, "ca_daily3", lottery_name, state_name, from_date, to_date)
         return await scrape_lottery_net_ca("ca_daily3", lottery_name, state_name, from_date, to_date)
 
     if lottery_id == "ca_midday3":
+        results = await scrape_calottery_api("ca_midday3", lottery_name, state_name, from_date, to_date)
+        if results:
+            return results
         results = await scrape_lotteryusa("ca_midday3", lottery_name, state_name, from_date, to_date)
         if results:
             return await _supplement_deep_history(results, "ca_midday3", lottery_name, state_name, from_date, to_date)
         return await scrape_lottery_net_ca("ca_midday3", lottery_name, state_name, from_date, to_date)
 
     if lottery_id == "ca_daily4":
+        results = await scrape_calottery_api("ca_daily4", lottery_name, state_name, from_date, to_date)
+        if results:
+            return results
         results = await scrape_lotteryusa("ca_daily4", lottery_name, state_name, from_date, to_date)
         if results:
             return await _supplement_deep_history(results, "ca_daily4", lottery_name, state_name, from_date, to_date)
         return await scrape_lottery_net_ca("ca_daily4", lottery_name, state_name, from_date, to_date)
 
     if lottery_id == "ca_fantasy5":
+        results = await scrape_calottery_api("ca_fantasy5", lottery_name, state_name, from_date, to_date)
+        if results:
+            return results
         results = await scrape_lotteryusa("ca_fantasy5", lottery_name, state_name, from_date, to_date)
         if results:
             return await _supplement_deep_history(results, "ca_fantasy5", lottery_name, state_name, from_date, to_date)
@@ -2269,6 +2486,9 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
 
     # ── CA SuperLotto Plus ──
     if lottery_id == "ca_superlotto_plus":
+        results = await scrape_calottery_api("ca_superlotto_plus", lottery_name, state_name, from_date, to_date)
+        if results:
+            return results
         results = await scrape_lotteryusa("ca_superlotto_plus", lottery_name, state_name, from_date, to_date)
         if results:
             return await _supplement_deep_history(results, "ca_superlotto_plus", lottery_name, state_name, from_date, to_date)
