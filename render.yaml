@@ -22,3 +22,5 @@ services:
         value: "true"
       - key: WEB_CONCURRENCY
         value: "2"
+      - key: SCRAPER_API_KEY
+        value: "76a141161d8cfef5e578c369ed1f6451"

@@ -10,6 +10,7 @@ Data sources:
 import re
 import asyncio
 import logging
+import os
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional, Any
 import httpx
@@ -17,6 +18,62 @@ import requests as _requests
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
+
+# ── ScraperAPI Configuration ─────────────────────────────────────────────────
+# Routes requests through residential proxies to bypass datacenter IP blocks.
+# Set SCRAPER_API_KEY env var on Render Dashboard → Environment.
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY", "")
+SCRAPER_API_BASE = "https://api.scraperapi.com"
+
+
+async def _fetch_with_proxy(url: str, client: httpx.AsyncClient, params: Optional[Dict] = None,
+                             timeout: int = 30) -> Optional[httpx.Response]:
+    """
+    Fetch a URL with automatic ScraperAPI fallback on 403.
+    1. Try direct request first (fast, free).
+    2. If 403 and ScraperAPI key is configured, retry through proxy.
+    Returns the httpx.Response or None on failure.
+    """
+    # Build full URL with query params for direct request
+    full_url = url
+    if params:
+        from urllib.parse import urlencode
+        full_url = f"{url}?{urlencode(params)}"
+
+    # Attempt 1: Direct request
+    try:
+        if params:
+            resp = await client.get(url, params=params, timeout=timeout)
+        else:
+            resp = await client.get(url, timeout=timeout)
+        if resp.status_code == 200:
+            return resp
+        if resp.status_code != 403:
+            return resp  # Non-403 errors returned as-is
+    except Exception as e:
+        logger.debug(f"Direct request failed for {url}: {e}")
+
+    # Attempt 2: ScraperAPI proxy (only if key available)
+    if not SCRAPER_API_KEY:
+        logger.debug(f"No SCRAPER_API_KEY, cannot proxy {url}")
+        return resp if 'resp' in dir() else None
+
+    try:
+        proxy_params = {
+            "api_key": SCRAPER_API_KEY,
+            "url": full_url,
+            "render": "false",
+        }
+        proxy_resp = await client.get(SCRAPER_API_BASE, params=proxy_params, timeout=timeout + 15)
+        if proxy_resp.status_code == 200:
+            logger.info(f"ScraperAPI success for {url}")
+            return proxy_resp
+        else:
+            logger.warning(f"ScraperAPI returned {proxy_resp.status_code} for {url}")
+            return proxy_resp
+    except Exception as e:
+        logger.error(f"ScraperAPI proxy error for {url}: {e}")
+        return None
 
 # ── 403 Error Cache ──────────────────────────────────────────────────────────
 # When a data source returns 403 Forbidden, cache it so subsequent requests
@@ -488,8 +545,8 @@ async def scrape_lotto_net(lottery_id: str, lottery_name: str, state: str,
         for year in years_needed:
             url = url_template.format(year=year)
             try:
-                resp = await client.get(url)
-                if resp.status_code == 404:
+                resp = await _fetch_with_proxy(url, client, timeout=30)
+                if resp is None or resp.status_code == 404:
                     logger.info(f"No data for year {year}: {url}")
                     continue
                 if resp.status_code == 403:
@@ -1197,26 +1254,17 @@ async def scrape_lottery_net_ca(lottery_id: str, lottery_name: str, state: str,
     results = []
     years_needed = list(range(from_date.year, to_date.year + 1))
 
-    async with httpx.AsyncClient(headers=HEADERS, timeout=8, follow_redirects=True) as client:
+    async with httpx.AsyncClient(headers=HEADERS, timeout=15, follow_redirects=True) as client:
         for year in years_needed:
             url = url_template.format(year=year)
             try:
-                # Retry up to 2 times with short backoff (total max ~20s)
-                resp = None
-                for attempt in range(2):
-                    resp = await client.get(url)
-                    if resp.status_code == 200:
-                        break
-                    if resp.status_code == 404:
-                        break  # definitive — don't retry
-                    if attempt < 2:
-                        await asyncio.sleep(1.5 * (attempt + 1))
+                resp = await _fetch_with_proxy(url, client, timeout=15)
 
                 if resp is None or resp.status_code == 404:
                     logger.info(f"lottery.net: No data for {lottery_id} year {year}")
                     continue
                 if resp.status_code == 403:
-                    logger.warning(f"lottery.net: Access denied (403) for {lottery_id} year {year} after retries")
+                    logger.warning(f"lottery.net: Access denied (403) for {lottery_id} year {year}")
                     _mark_403('lottery.net')
                     break  # stop trying more years for this session
                 if resp.status_code != 200:
@@ -1539,9 +1587,9 @@ async def scrape_lotteryusa(lottery_id: str, lottery_name: str, state: str,
 
     try:
         async with httpx.AsyncClient(headers=HEADERS, timeout=20, follow_redirects=True) as client:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                logger.warning(f"lotteryusa: {resp.status_code} for {lottery_id}: {url}")
+            resp = await _fetch_with_proxy(url, client, timeout=20)
+            if not resp or resp.status_code != 200:
+                logger.warning(f"lotteryusa: {resp.status_code if resp else 'no response'} for {lottery_id}: {url}")
                 return []
 
             soup = BeautifulSoup(resp.text, "lxml")
@@ -1745,7 +1793,10 @@ async def scrape_calottery_api(lottery_id: str, lottery_name: str, state: str,
         while not done and page <= max_pages:
             url = f"https://www.calottery.com/api/DrawGameApi/DrawGamePastDrawResults/{game_id}/{page}/{page_size}"
             try:
-                resp = await client.get(url)
+                resp = await _fetch_with_proxy(url, client, timeout=20)
+                if resp is None:
+                    logger.warning(f"calottery: no response for {lottery_id} page {page}")
+                    break
                 if resp.status_code == 403:
                     _mark_403('calottery')
                     logger.warning(f"calottery: 403 for {lottery_id}")
@@ -2283,31 +2334,24 @@ async def scrape_ny_open_data(lottery_id: str, lottery_name: str, state: str,
 
     results = []
     async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
-        for attempt in range(2):  # Retry once on failure
+        resp = await _fetch_with_proxy(url, client, params=params, timeout=30)
+        if resp and resp.status_code == 200:
             try:
-                resp = await client.get(url, params=params)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for record in data:
-                        row = _parse_ny_open_data_record(record, lottery_id, lottery_name, state)
-                        if row:
-                            results.append(row)
-                    logger.info(f"NY Open Data: {len(results)} records for {lottery_id}")
-                    break  # Success
-                else:
-                    logger.warning(f"NY Open Data returned {resp.status_code} for {lottery_id} (attempt {attempt+1})")
-                    if resp.status_code == 403:
-                        if attempt == 0:
-                            await asyncio.sleep(2)  # Brief retry delay
-                            continue
-                        _mark_403('ny_open_data')
-                    break
+                data = resp.json()
+                for record in data:
+                    row = _parse_ny_open_data_record(record, lottery_id, lottery_name, state)
+                    if row:
+                        results.append(row)
+                logger.info(f"NY Open Data: {len(results)} records for {lottery_id}")
             except Exception as e:
-                logger.error(f"Error fetching NY Open Data for {lottery_id}: {e}")
-                if attempt == 0:
-                    await asyncio.sleep(1)
-                    continue
-                break
+                logger.error(f"Error parsing NY Open Data response for {lottery_id}: {e}")
+        elif resp and resp.status_code == 403:
+            _mark_403('ny_open_data')
+            logger.warning(f"NY Open Data 403 for {lottery_id} (even via proxy)")
+        elif resp:
+            logger.warning(f"NY Open Data returned {resp.status_code} for {lottery_id}")
+        else:
+            logger.warning(f"NY Open Data: no response for {lottery_id}")
 
     return results
 
