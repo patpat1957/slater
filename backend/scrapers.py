@@ -27,36 +27,41 @@ SCRAPER_API_BASE = "https://api.scraperapi.com"
 
 
 async def _fetch_with_proxy(url: str, client: httpx.AsyncClient, params: Optional[Dict] = None,
-                             timeout: int = 30) -> Optional[httpx.Response]:
+                             timeout: int = 30, proxy_first: bool = False) -> Optional[httpx.Response]:
     """
     Fetch a URL with automatic ScraperAPI fallback on 403.
-    1. Try direct request first (fast, free).
+    1. Try direct request first (fast, free) — unless proxy_first=True.
     2. If 403 and ScraperAPI key is configured, retry through proxy.
+    proxy_first=True skips the direct attempt (use for known-blocked sources).
     Returns the httpx.Response or None on failure.
     """
-    # Build full URL with query params for direct request
+    from urllib.parse import urlencode
+
+    # Build full URL with query params
     full_url = url
     if params:
-        from urllib.parse import urlencode
         full_url = f"{url}?{urlencode(params)}"
 
-    # Attempt 1: Direct request
-    try:
-        if params:
-            resp = await client.get(url, params=params, timeout=timeout)
-        else:
-            resp = await client.get(url, timeout=timeout)
-        if resp.status_code == 200:
-            return resp
-        if resp.status_code != 403:
-            return resp  # Non-403 errors returned as-is
-    except Exception as e:
-        logger.debug(f"Direct request failed for {url}: {e}")
+    resp = None
+
+    # Attempt 1: Direct request (skip if proxy_first and key available)
+    if not (proxy_first and SCRAPER_API_KEY):
+        try:
+            if params:
+                resp = await client.get(url, params=params, timeout=min(timeout, 10))
+            else:
+                resp = await client.get(url, timeout=min(timeout, 10))
+            if resp.status_code == 200:
+                return resp
+            if resp.status_code != 403:
+                return resp  # Non-403 errors returned as-is
+        except Exception as e:
+            logger.debug(f"Direct request failed for {url}: {e}")
 
     # Attempt 2: ScraperAPI proxy (only if key available)
     if not SCRAPER_API_KEY:
         logger.debug(f"No SCRAPER_API_KEY, cannot proxy {url}")
-        return resp if 'resp' in dir() else None
+        return resp
 
     try:
         proxy_params = {
@@ -545,7 +550,7 @@ async def scrape_lotto_net(lottery_id: str, lottery_name: str, state: str,
         for year in years_needed:
             url = url_template.format(year=year)
             try:
-                resp = await _fetch_with_proxy(url, client, timeout=30)
+                resp = await _fetch_with_proxy(url, client, timeout=30, proxy_first=True)
                 if resp is None or resp.status_code == 404:
                     logger.info(f"No data for year {year}: {url}")
                     continue
@@ -1258,7 +1263,7 @@ async def scrape_lottery_net_ca(lottery_id: str, lottery_name: str, state: str,
         for year in years_needed:
             url = url_template.format(year=year)
             try:
-                resp = await _fetch_with_proxy(url, client, timeout=15)
+                resp = await _fetch_with_proxy(url, client, timeout=15, proxy_first=True)
 
                 if resp is None or resp.status_code == 404:
                     logger.info(f"lottery.net: No data for {lottery_id} year {year}")
@@ -1793,7 +1798,7 @@ async def scrape_calottery_api(lottery_id: str, lottery_name: str, state: str,
         while not done and page <= max_pages:
             url = f"https://www.calottery.com/api/DrawGameApi/DrawGamePastDrawResults/{game_id}/{page}/{page_size}"
             try:
-                resp = await _fetch_with_proxy(url, client, timeout=20)
+                resp = await _fetch_with_proxy(url, client, timeout=20, proxy_first=True)
                 if resp is None:
                     logger.warning(f"calottery: no response for {lottery_id} page {page}")
                     break
@@ -2334,7 +2339,7 @@ async def scrape_ny_open_data(lottery_id: str, lottery_name: str, state: str,
 
     results = []
     async with httpx.AsyncClient(timeout=30, headers=HEADERS) as client:
-        resp = await _fetch_with_proxy(url, client, params=params, timeout=30)
+        resp = await _fetch_with_proxy(url, client, params=params, timeout=30, proxy_first=True)
         if resp and resp.status_code == 200:
             try:
                 data = resp.json()
