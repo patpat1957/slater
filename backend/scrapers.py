@@ -1785,7 +1785,7 @@ async def scrape_calottery_api(lottery_id: str, lottery_name: str, state: str,
     results = []
     page = 1
     page_size = 100  # Max per request
-    max_pages = 20   # Safety limit (~2000 draws max)
+    max_pages = 55   # Safety limit (~5500 draws max, covers ~15 years of daily games)
     done = False
 
     api_headers = {
@@ -2500,6 +2500,17 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
     if lottery_id in ("ca_daily3", "ca_pick3"):
         results = await scrape_calottery_api("ca_daily3", lottery_name, state_name, from_date, to_date)
         if results:
+            # Supplement from lottery.net if calottery didn't reach from_date
+            oldest = min(r.get("Date", "") for r in results)
+            if oldest > from_date.isoformat():
+                logger.info(f"ca_daily3: calottery oldest={oldest}, need {from_date}, supplementing from lottery.net")
+                supplement = await scrape_lottery_net_ca("ca_daily3", lottery_name, state_name, from_date, date.fromisoformat(oldest))
+                if supplement:
+                    existing_dates = {r.get("Date") for r in results}
+                    for row in supplement:
+                        if row.get("Date") not in existing_dates:
+                            results.append(row)
+                    results.sort(key=lambda x: x.get("Date", ""), reverse=True)
             return results
         results = await scrape_lotteryusa("ca_daily3", lottery_name, state_name, from_date, to_date)
         if results:
@@ -2509,6 +2520,16 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
     if lottery_id == "ca_midday3":
         results = await scrape_calottery_api("ca_midday3", lottery_name, state_name, from_date, to_date)
         if results:
+            oldest = min(r.get("Date", "") for r in results)
+            if oldest > from_date.isoformat():
+                logger.info(f"ca_midday3: calottery oldest={oldest}, need {from_date}, supplementing from lottery.net")
+                supplement = await scrape_lottery_net_ca("ca_midday3", lottery_name, state_name, from_date, date.fromisoformat(oldest))
+                if supplement:
+                    existing_dates = {r.get("Date") for r in results}
+                    for row in supplement:
+                        if row.get("Date") not in existing_dates:
+                            results.append(row)
+                    results.sort(key=lambda x: x.get("Date", ""), reverse=True)
             return results
         results = await scrape_lotteryusa("ca_midday3", lottery_name, state_name, from_date, to_date)
         if results:
@@ -2518,6 +2539,17 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
     if lottery_id == "ca_daily4":
         results = await scrape_calottery_api("ca_daily4", lottery_name, state_name, from_date, to_date)
         if results:
+            # Supplement from lottery.net if calottery didn't reach from_date
+            oldest = min(r.get("Date", "") for r in results)
+            if oldest > from_date.isoformat():
+                logger.info(f"ca_daily4: calottery oldest={oldest}, need {from_date}, supplementing from lottery.net")
+                supplement = await scrape_lottery_net_ca("ca_daily4", lottery_name, state_name, from_date, date.fromisoformat(oldest))
+                if supplement:
+                    existing_dates = {r.get("Date") for r in results}
+                    for row in supplement:
+                        if row.get("Date") not in existing_dates:
+                            results.append(row)
+                    results.sort(key=lambda x: x.get("Date", ""), reverse=True)
             return results
         results = await scrape_lotteryusa("ca_daily4", lottery_name, state_name, from_date, to_date)
         if results:
@@ -2527,6 +2559,16 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
     if lottery_id == "ca_fantasy5":
         results = await scrape_calottery_api("ca_fantasy5", lottery_name, state_name, from_date, to_date)
         if results:
+            oldest = min(r.get("Date", "") for r in results)
+            if oldest > from_date.isoformat():
+                logger.info(f"ca_fantasy5: calottery oldest={oldest}, need {from_date}, supplementing from lottery.net")
+                supplement = await scrape_lottery_net_ca("ca_fantasy5", lottery_name, state_name, from_date, date.fromisoformat(oldest))
+                if supplement:
+                    existing_dates = {r.get("Date") for r in results}
+                    for row in supplement:
+                        if row.get("Date") not in existing_dates:
+                            results.append(row)
+                    results.sort(key=lambda x: x.get("Date", ""), reverse=True)
             return results
         results = await scrape_lotteryusa("ca_fantasy5", lottery_name, state_name, from_date, to_date)
         if results:
@@ -2537,6 +2579,16 @@ async def fetch_lottery_results(lottery_id: str, lottery_name: str, state_name: 
     if lottery_id == "ca_superlotto_plus":
         results = await scrape_calottery_api("ca_superlotto_plus", lottery_name, state_name, from_date, to_date)
         if results:
+            oldest = min(r.get("Date", "") for r in results)
+            if oldest > from_date.isoformat():
+                logger.info(f"ca_superlotto_plus: calottery oldest={oldest}, supplementing from lottery.net")
+                supplement = await scrape_lottery_net_ca("ca_superlotto_plus", lottery_name, state_name, from_date, date.fromisoformat(oldest))
+                if supplement:
+                    existing_dates = {r.get("Date") for r in results}
+                    for row in supplement:
+                        if row.get("Date") not in existing_dates:
+                            results.append(row)
+                    results.sort(key=lambda x: x.get("Date", ""), reverse=True)
             return results
         results = await scrape_lotteryusa("ca_superlotto_plus", lottery_name, state_name, from_date, to_date)
         if results:
