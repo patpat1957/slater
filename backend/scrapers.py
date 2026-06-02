@@ -1783,9 +1783,9 @@ async def scrape_calottery_api(lottery_id: str, lottery_name: str, state: str,
         return []
 
     results = []
-    page = 1
     page_size = 100  # Max per request
     max_pages = 55   # Safety limit (~5500 draws max, covers ~15 years of daily games)
+    BATCH_SIZE = 3   # Fetch 3 pages concurrently to speed up large requests
     done = False
 
     api_headers = {
@@ -1794,23 +1794,46 @@ async def scrape_calottery_api(lottery_id: str, lottery_name: str, state: str,
         "Referer": "https://www.calottery.com/draw-games",
     }
 
-    async with httpx.AsyncClient(headers=api_headers, timeout=20, follow_redirects=True) as client:
+    async with httpx.AsyncClient(headers=api_headers, timeout=45, follow_redirects=True) as client:
+        page = 1
         while not done and page <= max_pages:
-            url = f"https://www.calottery.com/api/DrawGameApi/DrawGamePastDrawResults/{game_id}/{page}/{page_size}"
-            try:
-                resp = await _fetch_with_proxy(url, client, timeout=20, proxy_first=True)
+            # Fetch a batch of pages concurrently
+            batch_end = min(page + BATCH_SIZE, max_pages + 1)
+            batch_pages = list(range(page, batch_end))
+
+            async def _fetch_page(p):
+                url = f"https://www.calottery.com/api/DrawGameApi/DrawGamePastDrawResults/{game_id}/{p}/{page_size}"
+                return p, await _fetch_with_proxy(url, client, timeout=30, proxy_first=True)
+
+            batch_results = await asyncio.gather(*[_fetch_page(p) for p in batch_pages], return_exceptions=True)
+
+            for item in sorted(batch_results, key=lambda x: x[0] if isinstance(x, tuple) else 999):
+                if isinstance(item, Exception):
+                    logger.error(f"calottery: batch fetch error: {item}")
+                    done = True
+                    break
+
+                pg, resp = item
                 if resp is None:
-                    logger.warning(f"calottery: no response for {lottery_id} page {page}")
+                    logger.warning(f"calottery: no response for {lottery_id} page {pg}")
+                    done = True
                     break
                 if resp.status_code == 403:
                     _mark_403('calottery')
                     logger.warning(f"calottery: 403 for {lottery_id}")
+                    done = True
                     break
                 if resp.status_code != 200:
-                    logger.warning(f"calottery: {resp.status_code} for {lottery_id} page {page}")
+                    logger.warning(f"calottery: {resp.status_code} for {lottery_id} page {pg}")
+                    done = True
                     break
 
-                data = resp.json()
+                try:
+                    data = resp.json()
+                except Exception:
+                    done = True
+                    break
+
                 draws = data.get("PreviousDraws", [])
                 if not draws:
                     done = True
@@ -1832,16 +1855,12 @@ async def scrape_calottery_api(lottery_id: str, lottery_name: str, state: str,
                     if draw_dt <= to_date:
                         results.append(row)
 
-                page += 1
                 if len(draws) < page_size:
                     done = True
-                else:
-                    await asyncio.sleep(0.3)  # Be polite
 
-            except Exception as e:
-                logger.error(f"calottery API error for {lottery_id} page {page}: {e}")
-                _mark_error('calottery')
-                break
+            page = batch_end
+            if not done:
+                await asyncio.sleep(0.2)  # Brief pause between batches
 
     if results:
         _clear_errors('calottery')

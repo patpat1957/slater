@@ -500,11 +500,11 @@ def _validate_dates(from_date_str: str, to_date_str: str):
     if to_dt > today:
         to_dt = today  # Cap at today
 
-    max_range = timedelta(days=365 * 10 + 3)  # ~10-year limit per request (Powerball/Mega need deeper history)
+    max_range = timedelta(days=365 * 15 + 4)  # ~15-year limit per request (daily games need ~5000+ records)
     if to_dt - from_dt > max_range:
         raise HTTPException(
             status_code=400,
-            detail="Date range too large. Maximum 10 years per request. Use multiple requests for longer ranges."
+            detail="Date range too large. Maximum 15 years per request. Use multiple requests for longer ranges."
         )
 
     return from_dt, to_dt
