@@ -767,12 +767,10 @@ body.embedded .header { display:none !important; }
     <button class="tab-btn active" data-game="pick3"   onclick="switchGame('pick3',this)">🎯 Pick 3</button>
     <button class="tab-btn"        data-game="pick4"   onclick="switchGame('pick4',this)">🎲 Pick 4</button>
     <button class="tab-btn"        data-game="pick5"   onclick="switchGame('pick5',this)">🎳 Pick 5</button>
-    <button class="tab-btn"        data-game="pick6"   onclick="switchGame('pick6',this)">🎰 Pick 6</button>
-    <button class="tab-btn"        data-game="cash3"   onclick="switchGame('cash3',this)">💵 Cash 3</button>
-    <button class="tab-btn"        data-game="daily3"  onclick="switchGame('daily3',this)">📅 Daily 3</button>
+    <button class="tab-btn"        data-game="cash5"   onclick="switchGame('cash5',this)">🌟 Cash 5</button>
+    <button class="tab-btn"        data-game="lotto"   onclick="switchGame('lotto',this)">🎰 Lotto</button>
     <button class="tab-btn"        data-game="powerball"     onclick="switchGame('powerball',this)">🔴 Powerball</button>
     <button class="tab-btn"        data-game="megamillions"  onclick="switchGame('megamillions',this)">💛 Mega Millions</button>
-    <button class="tab-btn"        data-game="lucky5"  onclick="switchGame('lucky5',this)">⭐ 5+Bonus</button>
   </div>
 </div>
 
@@ -984,196 +982,131 @@ body.embedded .header { display:none !important; }
   </div>
 </div>
 
-<!-- ════════ PICK 6 ════════ -->
-<div id="panel-pick6" class="game-panel">
+<!-- ════════ CASH 5 / FANTASY 5 ════════ -->
+<div id="panel-cash5" class="game-panel">
   <div class="draw-tabs">
-    <div class="draw-tab active" onclick="setDraw('pick6','midday',this)">☀️ Midday</div>
-    <div class="draw-tab"       onclick="setDraw('pick6','evening',this)">🌆 Evening</div>
+    <div class="draw-tab active" onclick="setDraw('cash5','evening',this)">🌆 Evening</div>
+    <div class="draw-tab"       onclick="setDraw('cash5','midday',this)">☀️ Midday</div>
   </div>
   <!-- Part 1 — Live Scoreboard (top position, full width) -->
   <div class="card mb14">
-    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
-    <div id="p6-filter-bar"></div>
+    <div class="section-title">📋 Part 1 — Live Scoreboard (Cash 5 / Fantasy 5 / Take 5)</div>
+    <div id="c5-filter-bar"></div>
     <table class="sb-table">
-      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5</th><th>P6</th><th>Status</th><th></th></tr></thead>
-      <tbody id="p6-tbody"><tr><td colspan="9" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
+      <thead><tr><th>State</th><th>B1</th><th>B2</th><th>B3</th><th>B4</th><th>B5</th><th>Status</th><th></th></tr></thead>
+      <tbody id="c5-tbody"><tr><td colspan="8" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
     </table>
   </div>
   <div class="grid-2">
     <div>
       <div class="card mb14">
-        <div class="section-title">📊 Part 2 — Digit Frequency</div>
-        <div id="p6-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
+        <div class="section-title">📊 Part 2 — Number Frequency</div>
+        <div id="c5-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
       </div>
       <div class="card mb14">
         <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
-        <div id="p6-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
+        <div id="c5-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
       </div>
       <div class="card">
         <div class="section-title">🔍 Part 4 — Positional Bias Detection</div>
-        <div id="p6-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+        <div id="c5-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
       </div>
     </div>
     <div>
       <div class="card">
         <div class="section-title">📸 Part 6 — Summary Snapshot</div>
-        <div id="p6-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+        <div id="c5-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
       </div>
     </div>
   </div>
-  <div id="p6-summary" class="summary-banner mb14">
-    <div class="sb-item"><div class="sb-val" id="p6-s-draws">0</div><div class="sb-key">Confirmed</div></div>
-    <div class="sb-item"><div class="sb-val text-blue" id="p6-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
-    <div class="sb-item"><div class="sb-val" id="p6-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
-    <div class="sb-item"><div class="sb-val" id="p6-s-balls">0</div><div class="sb-key">Total Balls</div></div>
-    <div class="sb-item"><div class="sb-val text-red"   id="p6-s-hot">—</div><div class="sb-key">🔥 Hottest</div></div>
-    <div class="sb-item"><div class="sb-val text-muted" id="p6-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
-    <div class="sb-item"><div class="sb-val text-accent" id="p6-s-pick">—</div><div class="sb-key">🎯 Top Pick</div></div>
+  <div id="c5-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="c5-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="c5-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="c5-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="c5-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="c5-s-hot">—</div><div class="sb-key">🔥 Hottest</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="c5-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="c5-s-pick">—</div><div class="sb-key">🎯 Top Pick</div></div>
   </div>
   <div class="card mb14 add-result-card">
-    <div class="section-title">➕ Add Result</div>
+    <div class="section-title">➕ Add Cash 5 / Fantasy 5 Result</div>
     <div class="input-row">
-      <input type="text" id="p6-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
-      <input type="text" id="p6-n1" placeholder="P1" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n2')"/>
-      <input type="text" id="p6-n2" placeholder="P2" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n3')"/>
-      <input type="text" id="p6-n3" placeholder="P3" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n4')"/>
-      <input type="text" id="p6-n4" placeholder="P4" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n5')"/>
-      <input type="text" id="p6-n5" placeholder="P5" maxlength="2" style="width:52px" oninput="autoTab2(this,'p6-n6')"/>
-      <input type="text" id="p6-n6" placeholder="P6" maxlength="2" style="width:52px"/>
-      <select id="p6-status" style="width:125px">
+      <input type="text" id="c5-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="c5-n1" placeholder="B1" maxlength="2" style="width:52px" oninput="autoTab2(this,'c5-n2')"/>
+      <input type="text" id="c5-n2" placeholder="B2" maxlength="2" style="width:52px" oninput="autoTab2(this,'c5-n3')"/>
+      <input type="text" id="c5-n3" placeholder="B3" maxlength="2" style="width:52px" oninput="autoTab2(this,'c5-n4')"/>
+      <input type="text" id="c5-n4" placeholder="B4" maxlength="2" style="width:52px" oninput="autoTab2(this,'c5-n5')"/>
+      <input type="text" id="c5-n5" placeholder="B5" maxlength="2" style="width:52px"/>
+      <select id="c5-status" style="width:125px">
         <option value="confirmed">✅ Confirmed</option>
         <option value="partial">🔷 Partial</option>
         <option value="pending">⏳ Pending</option>
       </select>
-      <button class="btn btn-primary" onclick="addPickN('pick6',6)">Add</button>
+      <button class="btn btn-primary" onclick="addPickN('cash5',5)">Add</button>
     </div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:4px">CA Fantasy 5, FL Fantasy 5, NY Take 5, GA Fantasy 5, TX Cash 5, NC Cash 5, PA Cash 5, etc.</div>
   </div>
 </div>
 
-<!-- ════════ CASH 3 ════════ -->
-<div id="panel-cash3" class="game-panel">
+<!-- ════════ LOTTO (6-Ball Games) ════════ -->
+<div id="panel-lotto" class="game-panel">
   <div class="draw-tabs">
-    <div class="draw-tab active" onclick="setDraw('cash3','midday',this)">☀️ Midday</div>
-    <div class="draw-tab"       onclick="setDraw('cash3','evening',this)">🌆 Evening</div>
-    <div class="draw-tab"       onclick="setDraw('cash3','night',this)">🌙 Night</div>
+    <div class="draw-tab active" onclick="setDraw('lotto','evening',this)">🌆 Evening</div>
   </div>
   <!-- Part 1 — Live Scoreboard (top position, full width) -->
   <div class="card mb14">
-    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
-    <div id="c3-filter-bar"></div>
+    <div class="section-title">📋 Part 1 — Live Scoreboard (Lotto / Pick 6 / Match 6)</div>
+    <div id="lt-filter-bar"></div>
     <table class="sb-table">
-      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>Status</th><th></th></tr></thead>
-      <tbody id="c3-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
+      <thead><tr><th>State</th><th>B1</th><th>B2</th><th>B3</th><th>B4</th><th>B5</th><th>B6</th><th>Bonus</th><th>Status</th><th></th></tr></thead>
+      <tbody id="lt-tbody"><tr><td colspan="10" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
     </table>
   </div>
   <div class="grid-2">
     <div>
       <div class="card mb14">
-        <div class="section-title">📊 Part 2 — Frequency</div>
-        <div id="c3-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
-      </div>
-      <div class="card mb14">
-        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
-        <div id="c3-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
+        <div class="section-title">📊 Part 2 — Number Frequency</div>
+        <div id="lt-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
       </div>
       <div class="card">
-        <div class="section-title">🔍 Part 4 — Bias Detection</div>
-        <div id="c3-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
+        <div class="section-title">🔍 Part 4 — Positional Bias Detection</div>
+        <div id="lt-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
       </div>
     </div>
     <div>
       <div class="card">
         <div class="section-title">📸 Part 6 — Summary Snapshot</div>
-        <div id="c3-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
+        <div id="lt-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
       </div>
     </div>
   </div>
-  <div id="c3-summary" class="summary-banner mb14">
-    <div class="sb-item"><div class="sb-val" id="c3-s-draws">0</div><div class="sb-key">Confirmed</div></div>
-    <div class="sb-item"><div class="sb-val text-blue" id="c3-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
-    <div class="sb-item"><div class="sb-val" id="c3-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
-    <div class="sb-item"><div class="sb-val" id="c3-s-balls">0</div><div class="sb-key">Total Balls</div></div>
-    <div class="sb-item"><div class="sb-val text-red"   id="c3-s-hot">—</div><div class="sb-key">🔥 Hot</div></div>
-    <div class="sb-item"><div class="sb-val text-muted" id="c3-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
-    <div class="sb-item"><div class="sb-val text-accent" id="c3-s-pick">—</div><div class="sb-key">🎯 Pick</div></div>
+  <div id="lt-summary" class="summary-banner mb14">
+    <div class="sb-item"><div class="sb-val" id="lt-s-draws">0</div><div class="sb-key">Confirmed</div></div>
+    <div class="sb-item"><div class="sb-val text-blue" id="lt-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
+    <div class="sb-item"><div class="sb-val" id="lt-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
+    <div class="sb-item"><div class="sb-val" id="lt-s-balls">0</div><div class="sb-key">Total Balls</div></div>
+    <div class="sb-item"><div class="sb-val text-red"   id="lt-s-hot">—</div><div class="sb-key">🔥 Hottest</div></div>
+    <div class="sb-item"><div class="sb-val text-muted" id="lt-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
+    <div class="sb-item"><div class="sb-val text-accent" id="lt-s-pick">—</div><div class="sb-key">🎯 Top Pick</div></div>
   </div>
   <div class="card mb14 add-result-card">
-    <div class="section-title">➕ Add Cash 3 Result</div>
+    <div class="section-title">➕ Add Lotto Result</div>
     <div class="input-row">
-      <input type="text" id="c3-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
-      <input type="text" id="c3-n1" placeholder="P1" maxlength="1" style="width:54px" oninput="autoTab(this,'c3-n2')"/>
-      <input type="text" id="c3-n2" placeholder="P2" maxlength="1" style="width:54px" oninput="autoTab(this,'c3-n3')"/>
-      <input type="text" id="c3-n3" placeholder="P3" maxlength="1" style="width:54px"/>
-      <select id="c3-status" style="width:125px">
+      <input type="text" id="lt-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
+      <input type="text" id="lt-n1" placeholder="B1" maxlength="2" style="width:52px" oninput="autoTab2(this,'lt-n2')"/>
+      <input type="text" id="lt-n2" placeholder="B2" maxlength="2" style="width:52px" oninput="autoTab2(this,'lt-n3')"/>
+      <input type="text" id="lt-n3" placeholder="B3" maxlength="2" style="width:52px" oninput="autoTab2(this,'lt-n4')"/>
+      <input type="text" id="lt-n4" placeholder="B4" maxlength="2" style="width:52px" oninput="autoTab2(this,'lt-n5')"/>
+      <input type="text" id="lt-n5" placeholder="B5" maxlength="2" style="width:52px" oninput="autoTab2(this,'lt-n6')"/>
+      <input type="text" id="lt-n6" placeholder="B6" maxlength="2" style="width:52px"/>
+      <select id="lt-status" style="width:125px">
         <option value="confirmed">✅ Confirmed</option>
         <option value="partial">🔷 Partial</option>
         <option value="pending">⏳ Pending</option>
       </select>
-      <button class="btn btn-primary" onclick="addGeneric3('cash3')">Add</button>
+      <button class="btn btn-primary" onclick="addPickN('lotto',6)">Add</button>
     </div>
-  </div>
-</div>
-
-<!-- ════════ DAILY 3 ════════ -->
-<div id="panel-daily3" class="game-panel">
-  <div class="draw-tabs">
-    <div class="draw-tab active" onclick="setDraw('daily3','midday',this)">☀️ Midday</div>
-    <div class="draw-tab"       onclick="setDraw('daily3','evening',this)">🌆 Evening</div>
-  </div>
-  <!-- Part 1 — Live Scoreboard (top position, full width) -->
-  <div class="card mb14">
-    <div class="section-title">📋 Part 1 — Live Scoreboard</div>
-    <div id="d3-filter-bar"></div>
-    <table class="sb-table">
-      <thead><tr><th>State</th><th>P1</th><th>P2</th><th>P3</th><th>Status</th><th></th></tr></thead>
-      <tbody id="d3-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">No results yet</td></tr></tbody>
-    </table>
-  </div>
-  <div class="grid-2">
-    <div>
-      <div class="card mb14">
-        <div class="section-title">📊 Part 2 — Frequency</div>
-        <div id="d3-freq"><div class="text-muted" style="padding:8px">Add results to see frequency.</div></div>
-      </div>
-      <div class="card mb14">
-        <div class="section-title">🗺️ Part 3 — Missing Numbers Per Position</div>
-        <div id="d3-posmaps"><div class="text-muted" style="padding:8px">Add results to see maps.</div></div>
-      </div>
-      <div class="card">
-        <div class="section-title">🔍 Part 4 — Bias Detection</div>
-        <div id="d3-bias"><div class="text-muted" style="padding:8px">Add results to detect bias.</div></div>
-      </div>
-    </div>
-    <div>
-      <div class="card">
-        <div class="section-title">📸 Part 6 — Summary Snapshot</div>
-        <div id="d3-snapshot"><div class="text-muted" style="padding:8px">Add results to generate snapshot.</div></div>
-      </div>
-    </div>
-  </div>
-  <div id="d3-summary" class="summary-banner mb14">
-    <div class="sb-item"><div class="sb-val" id="d3-s-draws">0</div><div class="sb-key">Confirmed</div></div>
-    <div class="sb-item"><div class="sb-val text-blue" id="d3-s-partial">0</div><div class="sb-key">🔷 Partial</div></div>
-    <div class="sb-item"><div class="sb-val" id="d3-s-pending">0</div><div class="sb-key">⏳ Pending</div></div>
-    <div class="sb-item"><div class="sb-val" id="d3-s-balls">0</div><div class="sb-key">Total Balls</div></div>
-    <div class="sb-item"><div class="sb-val text-red"   id="d3-s-hot">—</div><div class="sb-key">🔥 Hot</div></div>
-    <div class="sb-item"><div class="sb-val text-muted" id="d3-s-absent">—</div><div class="sb-key">❌ Absent</div></div>
-    <div class="sb-item"><div class="sb-val text-accent" id="d3-s-pick">—</div><div class="sb-key">🎯 Pick</div></div>
-  </div>
-  <div class="card mb14 add-result-card">
-    <div class="section-title">➕ Add Daily 3 Result</div>
-    <div class="input-row">
-      <input type="text" id="d3-state" placeholder="State" maxlength="3" style="width:80px;text-transform:uppercase"/>
-      <input type="text" id="d3-n1" placeholder="P1" maxlength="1" style="width:54px" oninput="autoTab(this,'d3-n2')"/>
-      <input type="text" id="d3-n2" placeholder="P2" maxlength="1" style="width:54px" oninput="autoTab(this,'d3-n3')"/>
-      <input type="text" id="d3-n3" placeholder="P3" maxlength="1" style="width:54px"/>
-      <select id="d3-status" style="width:125px">
-        <option value="confirmed">✅ Confirmed</option>
-        <option value="partial">🔷 Partial</option>
-        <option value="pending">⏳ Pending</option>
-      </select>
-      <button class="btn btn-primary" onclick="addGeneric3('daily3')">Add</button>
-    </div>
+    <div style="font-size:.72rem;color:var(--muted);margin-top:4px">NY Lotto, FL Lotto, TX Lotto Texas, IL Lotto, NJ Pick 6, PA Match 6, CA SuperLotto Plus</div>
   </div>
 </div>
 
@@ -1265,49 +1198,7 @@ body.embedded .header { display:none !important; }
   </div>
 </div>
 
-<!-- ════════ LUCKY 5 ════════ -->
-<div id="panel-lucky5" class="game-panel">
-  <!-- Part 1 — Scoreboard (top position, full width) -->
-  <div class="card mb14">
-    <div class="section-title">📋 Part 1 — Scoreboard</div>
-    <div id="l5-scoreboard"><div class="text-muted" style="padding:8px">No draws yet.</div></div>
-  </div>
-  <div class="grid-2">
-    <div>
-      <div class="card mb14">
-        <div class="section-title">📊 Ball Frequency (1–50)</div>
-        <div id="l5-freq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
-      </div>
-    </div>
-    <div>
-      <div class="card">
-        <div class="section-title">⭐ Bonus Ball Frequency (1–27)</div>
-        <div id="l5-megafreq"><div class="text-muted" style="padding:8px">Add draws to see frequency.</div></div>
-      </div>
-    </div>
-  </div>
-  <div id="l5-summary" class="summary-banner mb14">
-    <div class="sb-item"><div class="sb-val" id="l5-s-draws">0</div><div class="sb-key">Draws</div></div>
-    <div class="sb-item"><div class="sb-val text-red"   id="l5-s-hot">—</div><div class="sb-key">🔥 Hot Ball</div></div>
-    <div class="sb-item"><div class="sb-val text-accent2" id="l5-s-hotmega">—</div><div class="sb-key">🔥 Hot Bonus</div></div>
-    <div class="sb-item"><div class="sb-val text-muted" id="l5-s-absent">0</div><div class="sb-key">Balls Not Drawn</div></div>
-    <div class="sb-item"><div class="sb-val" id="l5-s-clock" style="font-size:.78rem;font-variant-numeric:tabular-nums">—</div><div class="sb-key">🕐 Live Time</div></div>
-  </div>
-  <div class="card mb14 add-result-card">
-    <div class="section-title">➕ Add 5-Ball + Bonus Result</div>
-    <div class="input-row">
-      <input type="text"   id="l5-state" placeholder="State" maxlength="4" style="width:58px;text-transform:uppercase" title="State abbreviation e.g. CA, VA, ME"/>
-      <input type="number" id="l5-n1" placeholder="B1" min="1" max="50" style="width:55px" title="Ball 1–50"/>
-      <input type="number" id="l5-n2" placeholder="B2" min="1" max="50" style="width:55px" title="Ball 1–50"/>
-      <input type="number" id="l5-n3" placeholder="B3" min="1" max="50" style="width:55px" title="Ball 1–50"/>
-      <input type="number" id="l5-n4" placeholder="B4" min="1" max="50" style="width:55px" title="Ball 1–50"/>
-      <input type="number" id="l5-n5" placeholder="B5" min="1" max="50" style="width:55px" title="Ball 1–50"/>
-      <input type="number" id="l5-mega" placeholder="Bonus" min="1" max="27" style="width:65px;border-color:var(--accent2)" title="Bonus ball 1–27"/>
-      <button class="btn btn-primary" onclick="addLucky5()">Add</button>
-    </div>
-    <div style="font-size:.72rem;color:var(--muted);margin-top:4px">5 balls 1–50 &nbsp;|&nbsp; Bonus ball 1–27 &nbsp;&bull;&nbsp; e.g. CA SuperLotto (1–47 / 1–27), VA Lotto, ME Megabucks&hellip;</div>
-  </div>
-</div>
+
 
 </div><!-- /main -->
 
@@ -1322,12 +1213,10 @@ const APP = {
   pick3:        { draw:'midday',  entries:[], statusFilter:'all' },
   pick4:        { draw:'midday',  entries:[], statusFilter:'all' },
   pick5:        { draw:'midday',  entries:[], statusFilter:'all' },
-  pick6:        { draw:'midday',  entries:[], statusFilter:'all' },
-  cash3:        { draw:'midday',  entries:[], statusFilter:'all' },
-  daily3:       { draw:'midday',  entries:[], statusFilter:'all' },
+  cash5:        { draw:'evening', entries:[], statusFilter:'all' },
+  lotto:        { draw:'evening', entries:[], statusFilter:'all' },
   powerball:    { entries:[] },
   megamillions: { entries:[] },
-  lucky5:       { entries:[] },
   date: '' // set after todayET() is defined below
 };
 
@@ -1342,7 +1231,7 @@ function markDataUpdated(){ _lastDataUpdate = new Date(); saveState(); }
 // ============================================================
 //  TODAY-ONLY PERSISTENCE & MIDNIGHT RESET
 // ============================================================
-const STORAGE_KEY = 'lotto_scoreboard_v25' // v25: parallel fetch (5x concurrency), pos[0] crash fix, Mega Ball max 25, 30-day jackpot lookback, 90s safety, 30 jackpot rows, mobile responsive
+const STORAGE_KEY = 'lotto_scoreboard_v26' // v26: consolidated tabs — pick3/pick4/pick5/cash5/lotto/powerball/megamillions. All states included.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getETDateParts(date?)  →  { year, month, day, hour, minute, second, dayOfWeek }
@@ -1409,12 +1298,10 @@ function saveState(){
         pick3:  {draw:APP.pick3.draw,  entries:APP.pick3.entries,  statusFilter:APP.pick3.statusFilter},
         pick4:  {draw:APP.pick4.draw,  entries:APP.pick4.entries,  statusFilter:APP.pick4.statusFilter},
         pick5:  {draw:APP.pick5.draw,  entries:APP.pick5.entries,  statusFilter:APP.pick5.statusFilter},
-        pick6:  {draw:APP.pick6.draw,  entries:APP.pick6.entries,  statusFilter:APP.pick6.statusFilter},
-        cash3:  {draw:APP.cash3.draw,  entries:APP.cash3.entries,  statusFilter:APP.cash3.statusFilter},
-        daily3: {draw:APP.daily3.draw, entries:APP.daily3.entries, statusFilter:APP.daily3.statusFilter},
+        cash5:  {draw:APP.cash5.draw,  entries:APP.cash5.entries,  statusFilter:APP.cash5.statusFilter},
+        lotto:  {draw:APP.lotto.draw,  entries:APP.lotto.entries,  statusFilter:APP.lotto.statusFilter},
         powerball:    {entries:APP.powerball.entries},
-        megamillions: {entries:APP.megamillions.entries},
-        lucky5:       {entries:APP.lucky5.entries}
+        megamillions: {entries:APP.megamillions.entries}
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(snap));
     } catch(e){}
@@ -1428,14 +1315,14 @@ function loadState(){
     if(!raw2) return false;
     var snap = JSON.parse(raw2);
     if(snap.savedDate !== todayET()){ localStorage.removeItem(STORAGE_KEY); return false; }
-    ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){
+    ['pick3','pick4','pick5','cash5','lotto'].forEach(function(g){
       if(snap[g]){
         APP[g].entries      = snap[g].entries      || [];
-        APP[g].draw         = snap[g].draw         || 'midday';
+        APP[g].draw         = snap[g].draw         || (g==='cash5'||g==='lotto' ? 'evening' : 'midday');
         APP[g].statusFilter = snap[g].statusFilter || 'all';
       }
     });
-    ['powerball','megamillions','lucky5'].forEach(function(g){
+    ['powerball','megamillions'].forEach(function(g){
       if(snap[g]) APP[g].entries = snap[g].entries || [];
     });
     APP.date = snap.savedDate;
@@ -1446,13 +1333,14 @@ function loadState(){
 /** Wipe everything and start fresh for a new day */
 function resetForNewDay(){
   localStorage.removeItem(STORAGE_KEY);
-  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){
-    APP[g].entries=[]; APP[g].statusFilter='all'; APP[g].draw='midday';
+  ['pick3','pick4','pick5','cash5','lotto'].forEach(function(g){
+    APP[g].entries=[]; APP[g].statusFilter='all';
+    APP[g].draw = (g==='cash5'||g==='lotto') ? 'evening' : 'midday';
   });
-  ['powerball','megamillions','lucky5'].forEach(function(g){ APP[g].entries=[]; });
+  ['powerball','megamillions'].forEach(function(g){ APP[g].entries=[]; });
   APP.date = todayET();
-  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){ renderGame(g); });
-  ['powerball','megamillions','lucky5'].forEach(function(g){ renderJackpot(g); });
+  ['pick3','pick4','pick5','cash5','lotto'].forEach(function(g){ renderGame(g); });
+  ['powerball','megamillions'].forEach(function(g){ renderJackpot(g); });
   showToast('🗓 New day! Scoreboard reset for ' + APP.date + ' — fetching live results…', 'info', 5000);
   // Auto-fetch live results for the new day
   setTimeout(function(){ fetchLiveAndRender(); }, 500);
@@ -1502,14 +1390,7 @@ function updateClock(){
     const lotteryDate = new Date(parseInt(ly), parseInt(lm)-1, parseInt(ld), 12, 0, 0);
     lbl.textContent = lotteryDate.toLocaleDateString('en-US',{weekday:'short', month:'short', day:'numeric'});
   }
-  // 5+Bonus live tile — always update when element exists
-  const l5c = document.getElementById('l5-s-clock');
-  if(l5c){
-    l5c.textContent = now.toLocaleString('en-US',{
-      timeZone:'America/New_York',
-      month:'2-digit',day:'2-digit',year:'numeric',
-      hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ET';
-  }
+  // (lucky5 clock removed — consolidated into lotto tab)
 }
 updateClock(); setInterval(updateClock, 1000);
 
@@ -1532,7 +1413,7 @@ function switchGame(game, btn){
     }
   }
   // Re-render on every tab switch so data is always fresh
-  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
   if(pickGames.includes(game)) renderGame(game);
   else renderJackpot(game);
 }
@@ -1560,8 +1441,9 @@ function confirmEntry(game, idx){
   if(!e) return;
   // prompt for any missing digits/numbers
   const n = e.nums.length;
-  const numOk = v => (game==='pick5'||game==='pick6') ? isNum49(v) : isDigit(v);
-  const hint  = game==='pick6' ? 'number (1-49)' : game==='pick5' ? 'number (1-39)' : 'digit (0-9)';
+  const isNumGame = (game==='pick5'||game==='cash5'||game==='lotto');
+  const numOk = v => isNumGame ? isNum49(v) : isDigit(v);
+  const hint  = isNumGame ? 'number (1-49)' : 'digit (0-9)';
   for(let i=0; i<n; i++){
     if(!numOk(e.nums[i])){
       const v = prompt(`Enter ${hint} for P${i+1} (${e.state}):`);
@@ -1598,17 +1480,18 @@ function editEntry(game, idx){
     return;
   }
   // validate: each part must be a valid number or '?'
-  // pick5 accepts 1-39, pick6 accepts 1-49; all others accept single digit 0-9
-  const validFn = (game==='pick5'||game==='pick6') ? (p=>isNum49(p)||p==='?') : (p=>isDigit(p)||p==='?');
+  // pick5/cash5/lotto use multi-digit numbers; pick3/4 use single digits 0-9
+  const isNumGameE = (game==='pick5'||game==='cash5'||game==='lotto');
+  const validFn = isNumGameE ? (p=>isNum49(p)||p==='?') : (p=>isDigit(p)||p==='?');
   const valid = parts.every(validFn);
   if(!valid){
-    const hint = game==='pick6' ? '1–49 or ?' : game==='pick5' ? '1–39 or ?' : 'single digit 0-9 or ?';
+    const hint = isNumGameE ? '1–49 or ?' : 'single digit 0-9 or ?';
     alert(`Each value must be ${hint} for unknown.`);
     return;
   }
   e.nums = parts;
   // auto-set status based on how many are known
-  const numOkFn2 = (game==='pick5'||game==='pick6') ? isNum49 : isDigit;
+  const numOkFn2 = isNumGameE ? isNum49 : isDigit;
   const knownCount = parts.filter(p=>numOkFn2(p)).length;
   e.status = knownCount===n ? 'confirmed' : knownCount>0 ? 'partial' : 'pending';
   renderGame(game);
@@ -1616,8 +1499,8 @@ function editEntry(game, idx){
 
 function clearAll(){
   if(!confirm('Clear ALL data for all games?')) return;
-  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(g=>{ APP[g].entries=[]; APP[g].statusFilter='all'; renderGame(g); });
-  ['powerball','megamillions','lucky5'].forEach(g=>{ APP[g].entries=[]; renderJackpot(g); });
+  ['pick3','pick4','pick5','cash5','lotto'].forEach(g=>{ APP[g].entries=[]; APP[g].statusFilter='all'; renderGame(g); });
+  ['powerball','megamillions'].forEach(g=>{ APP[g].entries=[]; renderJackpot(g); });
   try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
 }
 
@@ -1627,108 +1510,194 @@ function clearAll(){
 // ════════════════════════════════════════════════════════════
 const LIVE_FETCH = {
   // ─────────────────────────────────────────────────────────────────────────
-  // IDs here MUST match keys in the backend LOTTERY_NET_CA_URL_MAP (scrapers.py)
+  // Comprehensive: ALL states/games from LOTTERIES_BY_STATE
+  // IDs MUST match keys in backend lottery_config.py / scrapers.py
   // ─────────────────────────────────────────────────────────────────────────
   pick3: {
     midday: [
-      {state:'NY', id:'ny_numbers_midday'},  // NY Numbers Midday
-      {state:'PA', id:'pa_pick3_day'},        // PA Pick 3 Day  (lottery.net /pick-3-day/)
-      {state:'NJ', id:'nj_pick3'},            // NJ Pick 3 (single URL, no midday split)
+      {state:'CA', id:'ca_midday3'},
       {state:'FL', id:'fl_pick3_midday'},
-      {state:'GA', id:'ga_cash3_midday'},     // GA Cash 3 Midday
-      {state:'OH', id:'oh_pick3_midday'},     // OH Pick 3 Midday
+      {state:'GA', id:'ga_cash3_midday'},
+      {state:'NY', id:'ny_numbers_midday'},
+      {state:'PA', id:'pa_pick3_midday'},
+      {state:'NJ', id:'nj_pick3'},
+      {state:'OH', id:'oh_pick3_midday'},
       {state:'MD', id:'md_pick3_midday'},
-      {state:'VA', id:'va_pick3_day'},        // VA Pick 3 Day
-      {state:'NC', id:'nc_pick3_midday'},     // NC Pick 3 Midday
-      {state:'TN', id:'tn_cash3_midday'},     // TN Cash 3 Midday
+      {state:'VA', id:'va_pick3_day'},
+      {state:'NC', id:'nc_pick3_midday'},
+      {state:'TN', id:'tn_cash3_midday'},
       {state:'MI', id:'mi_daily3_midday'},
-      {state:'IN', id:'in_daily3_midday'},    // IN Daily 3 Midday
-      {state:'IL', id:'il_pick3_midday'},     // IL Pick 3 Midday
-      {state:'CA', id:'ca_midday3'},          // CA Daily 3 Midday
+      {state:'IN', id:'in_daily3_midday'},
+      {state:'IL', id:'il_pick3_midday'},
+      {state:'KY', id:'ky_pick3_midday'},
+      {state:'AR', id:'ar_cash3_midday'},
+      {state:'MA', id:'ma_numbers_midday'},
+      {state:'IA', id:'ia_pick3_midday'},
+      {state:'ID', id:'id_pick3_day'},
+      {state:'KS', id:'ks_pick3_midday'},
+      {state:'MS', id:'ms_cash3_midday'},
+      {state:'DE', id:'de_play3_day'},
     ],
     evening: [
-      {state:'NY', id:'ny_numbers'},
-      {state:'PA', id:'pa_pick3_evening'},    // PA Pick 3 Evening
-      {state:'NJ', id:'nj_pick3'},
+      {state:'CA', id:'ca_daily3'},
       {state:'FL', id:'fl_pick3'},
-      {state:'GA', id:'ga_cash3'},            // GA Cash 3 Evening
+      {state:'GA', id:'ga_cash3'},
+      {state:'NY', id:'ny_numbers'},
+      {state:'PA', id:'pa_pick3'},
+      {state:'NJ', id:'nj_pick3'},
       {state:'OH', id:'oh_pick3'},
       {state:'MD', id:'md_pick3'},
-      {state:'VA', id:'va_pick3'},            // VA Pick 3 Night
+      {state:'VA', id:'va_pick3'},
       {state:'NC', id:'nc_pick3'},
-      {state:'TN', id:'tn_cash3_evening'},    // TN Cash 3 Evening
+      {state:'TN', id:'tn_cash3_evening'},
       {state:'MI', id:'mi_daily3'},
-      {state:'IN', id:'in_daily3'},           // IN Daily 3 Evening
-      {state:'IL', id:'il_pick3_evening'},    // IL Pick 3 Evening
-      {state:'CA', id:'ca_daily3'},
+      {state:'IN', id:'in_daily3'},
+      {state:'IL', id:'il_pick3_evening'},
+      {state:'KY', id:'ky_pick3_evening'},
+      {state:'AR', id:'ar_cash3'},
+      {state:'MA', id:'ma_numbers'},
+      {state:'TX', id:'tx_pick3'},
+      {state:'MO', id:'mo_pick3'},
+      {state:'SC', id:'sc_pick3'},
+      {state:'LA', id:'la_pick3'},
+      {state:'WV', id:'wv_daily3'},
+      {state:'WI', id:'wi_pick3'},
+      {state:'AZ', id:'az_pick3'},
+      {state:'CO', id:'co_pick3'},
+      {state:'CT', id:'ct_play3'},
+      {state:'DE', id:'de_play3_night'},
+      {state:'IA', id:'ia_pick3_evening'},
+      {state:'ID', id:'id_pick3_night'},
+      {state:'KS', id:'ks_pick3_evening'},
+      {state:'ME', id:'me_pick3'},
+      {state:'MN', id:'mn_pick3'},
+      {state:'MS', id:'ms_cash3'},
+      {state:'NE', id:'ne_pick3'},
+      {state:'NH', id:'nh_pick3'},
+      {state:'NM', id:'nm_pick3'},
+      {state:'OK', id:'ok_pick3'},
+      {state:'RI', id:'ri_numbers'},
+      {state:'SD', id:'sd_pick3'},
+      {state:'VT', id:'vt_pick3'},
+      {state:'WA', id:'wa_daily_game'},
+    ],
+    night: [
+      {state:'GA', id:'ga_cash3_night'},
     ]
   },
   pick4: {
     midday: [
-      {state:'NY', id:'ny_win4_midday'},
-      {state:'PA', id:'pa_pick4_day'},        // PA Pick 4 Day
-      {state:'NJ', id:'nj_pick4'},            // NJ Pick 4 (single URL)
       {state:'FL', id:'fl_pick4_midday'},
-      {state:'GA', id:'ga_cash4_midday'},     // GA Cash 4 Midday
-      {state:'OH', id:'oh_pick4_midday'},     // OH Pick 4 Midday
+      {state:'GA', id:'ga_cash4_midday'},
+      {state:'NY', id:'ny_win4_midday'},
+      {state:'PA', id:'pa_pick4_midday'},
+      {state:'NJ', id:'nj_pick4'},
+      {state:'OH', id:'oh_pick4_midday'},
       {state:'MD', id:'md_pick4_midday'},
-      {state:'VA', id:'va_pick4_day'},        // VA Pick 4 Day
-      {state:'IL', id:'il_pick4_midday'},     // IL Pick 4 Midday
-      {state:'CA', id:'ca_daily4'},           // CA Daily 4 (single URL)
+      {state:'VA', id:'va_pick4_day'},
+      {state:'IL', id:'il_pick4_midday'},
+      {state:'KY', id:'ky_pick4_midday'},
+      {state:'IA', id:'ia_pick4_midday'},
+      {state:'ID', id:'id_pick4_day'},
+      {state:'MS', id:'ms_cash4_midday'},
+      {state:'MI', id:'mi_daily4_midday'},
+      {state:'DE', id:'de_play4_day'},
     ],
     evening: [
-      {state:'NY', id:'ny_win4'},
-      {state:'PA', id:'pa_pick4_evening'},    // PA Pick 4 Evening
-      {state:'NJ', id:'nj_pick4'},
+      {state:'CA', id:'ca_daily4'},
       {state:'FL', id:'fl_pick4'},
-      {state:'GA', id:'ga_cash4'},            // GA Cash 4 Evening
+      {state:'GA', id:'ga_cash4'},
+      {state:'NY', id:'ny_win4'},
+      {state:'PA', id:'pa_pick4'},
+      {state:'NJ', id:'nj_pick4'},
       {state:'OH', id:'oh_pick4'},
       {state:'MD', id:'md_pick4'},
-      {state:'VA', id:'va_pick4'},            // VA Pick 4 Night
-      {state:'IL', id:'il_pick4_evening'},    // IL Pick 4 Evening
-      {state:'CA', id:'ca_daily4'},
+      {state:'VA', id:'va_pick4'},
+      {state:'NC', id:'nc_pick4'},
+      {state:'IL', id:'il_pick4_evening'},
+      {state:'IN', id:'in_daily4'},
+      {state:'KY', id:'ky_pick4_evening'},
+      {state:'SC', id:'sc_pick4'},
+      {state:'TX', id:'tx_daily4'},
+      {state:'MO', id:'mo_pick4'},
+      {state:'LA', id:'la_pick4'},
+      {state:'WV', id:'wv_daily4'},
+      {state:'WI', id:'wi_pick4'},
+      {state:'CT', id:'ct_play4'},
+      {state:'DC', id:'dc_lottery'},
+      {state:'DE', id:'de_play4_night'},
+      {state:'IA', id:'ia_pick4_evening'},
+      {state:'ID', id:'id_pick4_night'},
+      {state:'ME', id:'me_pick4'},
+      {state:'MS', id:'ms_cash4'},
+      {state:'MI', id:'mi_daily4'},
+      {state:'NH', id:'nh_pick4'},
+      {state:'OR', id:'or_pick4'},
+      {state:'TN', id:'tn_pick4'},
+      {state:'VT', id:'vt_pick4'},
+      {state:'WA', id:'wa_match4'},
+    ],
+    night: [
+      {state:'GA', id:'ga_cash4_night'},
     ]
   },
   pick5: {
     midday: [
-      {state:'NY', id:'ny_take5_midday'},
       {state:'FL', id:'fl_pick5_midday'},
-      {state:'GA', id:'ga_five_midday'},      // GA Five Midday
-      {state:'VA', id:'va_cash5'},            // VA Cash 5 (single draw)
+      {state:'MD', id:'md_pick5_midday'},
+      {state:'DE', id:'de_play5_day'},
     ],
     evening: [
-      {state:'NY', id:'ny_take5'},
       {state:'FL', id:'fl_pick5'},
-      {state:'GA', id:'ga_five_evening'},     // GA Five Evening (was ga_five – wrong)
-      {state:'OH', id:'oh_rolling_cash5'},    // OH Rolling Cash 5 (was oh_rolling5 – wrong)
-      {state:'VA', id:'va_cash5'},
-      {state:'MI', id:'mi_fantasy5'},
-      {state:'CA', id:'ca_fantasy5'},
+      {state:'OH', id:'oh_pick5'},
+      {state:'PA', id:'pa_pick5'},
+      {state:'MD', id:'md_pick5'},
+      {state:'LA', id:'la_pick5'},
+      {state:'DE', id:'de_play5_night'},
+      {state:'NE', id:'ne_pick5'},
     ]
   },
-  pick6: {
+  cash5: {
+    midday: [
+      {state:'NY', id:'ny_take5_midday'},
+      {state:'GA', id:'ga_five_midday'},
+    ],
     evening: [
-      {state:'NJ', id:'nj_pick6'},
-      {state:'NY', id:'ny_lotto'},
-      {state:'PA', id:'pa_match6'},
+      {state:'AZ', id:'az_fantasy5'},
+      {state:'CA', id:'ca_fantasy5'},
+      {state:'CO', id:'co_cash5'},
+      {state:'CT', id:'ct_cash5'},
+      {state:'FL', id:'fl_fantasy5'},
+      {state:'GA', id:'ga_fantasy5'},
+      {state:'IN', id:'in_cash5'},
+      {state:'MI', id:'mi_fantasy5'},
+      {state:'NC', id:'nc_cash5'},
+      {state:'NJ', id:'nj_jersey_cash5'},
+      {state:'NY', id:'ny_take5'},
+      {state:'OH', id:'oh_rolling_cash5'},
+      {state:'OK', id:'ok_cash5'},
+      {state:'PA', id:'pa_cash5'},
+      {state:'SC', id:'sc_palmetto_cash5'},
+      {state:'TX', id:'tx_cash5'},
+      {state:'VA', id:'va_cash5'},
     ]
   },
-  cash3: {
-    midday:  [{state:'GA', id:'ga_cash3_midday'}, {state:'TN', id:'tn_cash3_midday'}, {state:'FL', id:'fl_pick3_midday'}],
-    evening: [{state:'GA', id:'ga_cash3'},        {state:'TN', id:'tn_cash3_evening'},{state:'FL', id:'fl_pick3'}]
-  },
-  daily3: {
-    midday:  [{state:'MI', id:'mi_daily3_midday'}, {state:'IN', id:'in_daily3_midday'}, {state:'IL', id:'il_pick3_midday'}, {state:'CA', id:'ca_midday3'}],
-    evening: [{state:'MI', id:'mi_daily3'},        {state:'IN', id:'in_daily3'},         {state:'IL', id:'il_pick3_evening'},{state:'CA', id:'ca_daily3'}]
+  lotto: {
+    evening: [
+      {state:'NY', id:'ny_lotto'},
+      {state:'FL', id:'fl_lotto'},
+      {state:'TX', id:'tx_lotto_texas'},
+      {state:'IL', id:'il_lotto'},
+      {state:'NJ', id:'nj_pick6'},
+      {state:'PA', id:'pa_match6'},
+      {state:'CA', id:'ca_superlotto_plus'},
+    ]
   },
   powerball: [
     {state:'US', id:'powerball'}
   ],
   megamillions: [
     {state:'US', id:'mega_millions'}
-  ],
-  lucky5: [
-    {state:'CA', id:'ca_superlotto_plus'}    // CA SuperLotto Plus (was ca_super_lotto_plus – wrong)
   ]
 };
 
@@ -1774,11 +1743,11 @@ async function fetchWithRetry(url, maxRetries){
 // ─── Build a reverse-lookup: lotteryId → {game, drawType, state} ─────────────
 function buildIdIndex(){
   const idx = {};
-  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
   for(const game of pickGames){
     const map = LIVE_FETCH[game];
     if(!map) continue;
-    for(const drawType of ['midday','evening']){
+    for(const drawType of ['midday','evening','night']){
       const items = map[drawType];
       if(!items) continue;
       for(const item of items){
@@ -1787,7 +1756,7 @@ function buildIdIndex(){
     }
   }
   // Jackpot games
-  for(const game of ['powerball','megamillions','lucky5']){
+  for(const game of ['powerball','megamillions']){
     const items = LIVE_FETCH[game];
     if(!items) continue;
     for(const item of items){
@@ -1810,17 +1779,17 @@ function buildStateBatches(fromDate, toDate, jackpotFromDate){
     if(from && from < batches[sc].from) batches[sc].from = from;
   }
 
-  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
   for(const game of pickGames){
     const map = LIVE_FETCH[game];
     if(!map) continue;
-    for(const drawType of ['midday','evening']){
+    for(const drawType of ['midday','evening','night']){
       const items = map[drawType];
       if(!items) continue;
       for(const item of items) addId(item.state, item.id, fromDate);
     }
   }
-  for(const game of ['powerball','megamillions','lucky5']){
+  for(const game of ['powerball','megamillions']){
     const items = LIVE_FETCH[game];
     if(!items) continue;
     for(const item of items) addId(item.state, item.id, jackpotFromDate);
@@ -1915,11 +1884,11 @@ async function _doFetchLiveAndRender(btn){
   }
 
   // ── Process pick-style games ───────────────────────────────────────────────
-  const pickGames = ['pick3','pick4','pick5','pick6','cash3','daily3'];
+  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
   for(const game of pickGames){
     const map = LIVE_FETCH[game];
     if(!map) continue;
-    for(const drawType of ['midday','evening']){
+    for(const drawType of ['midday','evening','night']){
       const items = map[drawType];
       if(!items) continue;
       const newEntries = [];
@@ -1952,7 +1921,7 @@ async function _doFetchLiveAndRender(btn){
   }
 
   // ── Process jackpot games ─────────────────────────────────────────────────
-  for(const game of ['powerball','megamillions','lucky5']){
+  for(const game of ['powerball','megamillions']){
     const items = LIVE_FETCH[game];
     if(!items) continue;
     const newEntries = [];
@@ -1974,9 +1943,6 @@ async function _doFetchLiveAndRender(btn){
         } else if(game==='megamillions'){
           const mb = parseInt(row.Mega_Ball || row.Mega || row.Ball_6 || 0);
           newEntries.push({date:dateStr, nums, mb, mp:1, ts:''});
-        } else if(game==='lucky5'){
-          const mega = parseInt(row.Mega || row.Bonus_Ball || row.Ball_6 || 0);
-          newEntries.push({state:'CA', date:dateStr, time:'7:57 PM', nums, mega, ts:'7:57 PM'});
         }
       }
     }
@@ -2002,8 +1968,8 @@ async function _doFetchLiveAndRender(btn){
       showToast('⚠️ Network error — showing cached data. Try again.', 'warn', 5000);
     } else {
       // API reachable but returned 0 records — data source may be temporarily unavailable
-      ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(g=>renderGame(g));
-      ['powerball','megamillions','lucky5'].forEach(g=>renderJackpot(g));
+      ['pick3','pick4','pick5','cash5','lotto'].forEach(g=>renderGame(g));
+      ['powerball','megamillions'].forEach(g=>renderJackpot(g));
       btn.textContent='⚠️ No new data'; setTimeout(()=>{ btn.textContent='↺ Update'; },4000);
       showToast('⚠️ Live source unavailable — showing most recent cached data ('+todayET()+')', 'warn', 5000);
     }
@@ -2021,14 +1987,14 @@ function refreshAll(){
 function printScoreboard(){
   // Determine the active game label and draw
   const gameLabels = {
-    pick3:'Pick 3', pick4:'Pick 4', pick5:'Pick 5', pick6:'Pick 6',
-    cash3:'Cash 3', daily3:'Daily 3', powerball:'Powerball',
-    megamillions:'Mega Millions', lucky5:'5-Ball + Bonus'
+    pick3:'Pick 3', pick4:'Pick 4', pick5:'Pick 5',
+    cash5:'Cash 5 / Fantasy 5', lotto:'Lotto / Pick 6',
+    powerball:'Powerball', megamillions:'Mega Millions'
   };
   const gameEmojis = {
-    pick3:'🎯', pick4:'🎲', pick5:'🎳', pick6:'🎰',
-    cash3:'💵', daily3:'📅', powerball:'🔴',
-    megamillions:'💛', lucky5:'⭐'
+    pick3:'🎯', pick4:'🎲', pick5:'🎳',
+    cash5:'🌟', lotto:'🎰',
+    powerball:'🔴', megamillions:'💛'
   };
   const game = APP.currentGame;
   const label = gameLabels[game] || game;
@@ -2170,7 +2136,7 @@ function addPendingPick3(){
 //  ADD — PICK 4 / PICK 5 (fixed — no template literal bug)
 // ════════════════════════════════════════════════════════════
 function addPickN(game, n){
-  const prefix  = game==='pick4' ? 'p4' : game==='pick5' ? 'p5' : 'p6';
+  const prefix  = {pick4:'p4',pick5:'p5',cash5:'c5',lotto:'lt'}[game] || 'p5';
   const stEl    = document.getElementById(prefix+'-state');
   const st      = stEl.value.trim().toUpperCase();
   if(!st) return;
@@ -2184,14 +2150,14 @@ function addPickN(game, n){
   const wb   = wbEl ? wbEl.value.trim() : '';
   const status = document.getElementById(prefix+'-status').value;
 
-  // pick5 (1-39) and pick6 (1-49) use multi-digit numbers; pick3/4 use single digits 0-9
-  const isNumGameAdd = (game==='pick5' || game==='pick6');
+  // pick5/cash5/lotto use multi-digit numbers; pick3/4 use single digits 0-9
+  const isNumGameAdd = (game==='pick5' || game==='cash5' || game==='lotto');
   const numOkFn = isNumGameAdd ? isNum49 : isDigit;
   const knownCount = nums.filter(d=>numOkFn(d)).length;
 
   // validation
   if(status==='confirmed' && knownCount < n){
-    const label = game==='pick6' ? 'numbers (1–49)' : game==='pick5' ? 'numbers (1–39)' : 'digits';
+    const label = isNumGameAdd ? 'numbers (1–49)' : 'digits';
     alert(`All ${n} ${label} required for Confirmed status.`); return;
   }
   if(status==='partial' && knownCount === 0){
@@ -2210,37 +2176,7 @@ function addPickN(game, n){
   renderGame(game);
 }
 
-// ════════════════════════════════════════════════════════════
-//  ADD — CASH 3 / DAILY 3
-// ════════════════════════════════════════════════════════════
-function addGeneric3(game){
-  const prefix = game==='cash3' ? 'c3' : 'd3';
-  const st  = document.getElementById(prefix+'-state').value.trim().toUpperCase();
-  const n1  = document.getElementById(prefix+'-n1').value.trim();
-  const n2  = document.getElementById(prefix+'-n2').value.trim();
-  const n3  = document.getElementById(prefix+'-n3').value.trim();
-  const status = document.getElementById(prefix+'-status').value;
-  if(!st) return;
-
-  const nums = [n1||'?', n2||'?', n3||'?'];
-  const knownCount = nums.filter(d=>isDigit(d)).length;
-
-  if(status==='confirmed' && knownCount < 3){
-    alert('All 3 digits required for Confirmed status.'); return;
-  }
-  if(status==='partial' && knownCount === 0){
-    alert('Partial requires at least 1 known digit. Use ⏳ Pending for fully unknown draws.'); return;
-  }
-
-  // auto-upgrade partial→confirmed if all digits filled
-  let finalStatus = status;
-  if(status==='partial' && knownCount === 3) finalStatus='confirmed';
-
-  APP[game].entries.push({ state:st, nums,
-    wb:'', status:finalStatus, draw:APP[game].draw, ts:now2() });
-  ['state','n1','n2','n3'].forEach(f=>document.getElementById(prefix+'-'+f).value='');
-  renderGame(game);
-}
+// addGeneric3 removed — cash3/daily3 consolidated into pick3
 
 // ════════════════════════════════════════════════════════════
 //  ADD — JACKPOT GAMES
@@ -2267,19 +2203,7 @@ function addMega(){
   renderJackpot('megamillions');
 }
 
-function addLucky5(){
-  const state = (document.getElementById('l5-state').value.trim().toUpperCase()||'—');
-  const nums  = [1,2,3,4,5].map(i=>parseInt(document.getElementById('l5-n'+i).value)||0);
-  const bonus = parseInt(document.getElementById('l5-mega').value)||0;
-  if(!nums.every(n=>isNum50(n))){ alert('Please enter 5 ball numbers (1–50).'); return; }
-  if(!isNum27(bonus)){ alert('Please enter the Bonus ball number (1–27).'); return; }
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'numeric'});
-  const timeStr = now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  APP.lucky5.entries.push({state, nums, mega:bonus, date:dateStr, time:timeStr, ts:timeStr});
-  ['l5-n1','l5-n2','l5-n3','l5-n4','l5-n5','l5-mega'].forEach(id=>document.getElementById(id).value='');
-  renderJackpot('lucky5');
-}
+// addLucky5 removed — SuperLotto Plus now under 'lotto' tab
 
 // ════════════════════════════════════════════════════════════
 //  REMOVE
@@ -2326,13 +2250,11 @@ function analyzePickN(game, n){
   const pending   = drawEntries.filter(e=>e.status==='pending');
   const allForAnalysis = [...confirmed, ...partial];
 
-  // pick5 = Fantasy 5 style (numbers 1-39)
-  // pick6 = standard Pick 6 style (numbers 1-49)
-  // others (pick3, pick4, cash3, daily3) = single digit 0-9
-  const isFan5  = game==='pick5';
-  const isPick6 = game==='pick6';
-  const isNumGame = isFan5 || isPick6;           // any game that uses multi-digit numbers
-  const poolSize  = isFan5 ? 39 : isPick6 ? 49 : 10;
+  // pick5/cash5 = Fantasy 5 / Cash 5 style (numbers 1-39/45)
+  // lotto = Pick 6 / Lotto style (numbers 1-49)
+  // others (pick3, pick4) = single digit 0-9
+  const isNumGame = (game==='pick5'||game==='cash5'||game==='lotto');
+  const poolSize  = game==='lotto' ? 49 : isNumGame ? 45 : 10;
   const numOkFn   = isNumGame ? isNum49 : isDigit;
 
   // position counters — pool[k] where k = digit(0-9) or number-1 (1-based offset)
@@ -2391,8 +2313,8 @@ function buildStatusFilterBar(game){
 
 function renderGame(game){
   const g       = APP[game];
-  const n       = {pick3:3,pick4:4,pick5:5,pick6:6,cash3:3,daily3:3}[game];
-  const prefix  = {pick3:'p3',pick4:'p4',pick5:'p5',pick6:'p6',cash3:'c3',daily3:'d3'}[game];
+  const n       = {pick3:3,pick4:4,pick5:5,cash5:5,lotto:6}[game];
+  const prefix  = {pick3:'p3',pick4:'p4',pick5:'p5',cash5:'c5',lotto:'lt'}[game];
   const curDraw = g.draw;
   const sf      = g.statusFilter || 'all';   // current status view-filter
   const an      = analyzePickN(game, n);
@@ -2448,8 +2370,8 @@ function renderGame(game){
     const show = sf==='all' ? drawDeduped
                : drawDeduped.filter(e=>e.status===sf);
 
-    // colspan: pick3=7, pick4=7, pick5=8, pick6=9, cash3/daily3=6
-    const colCount = n===3?(game==='pick3'?7:6):(n===4?7:(n+3));
+    // colspan: pick3=7, pick4=7, pick5=8, cash5=8, lotto=9
+    const colCount = n<=4 ? 7 : (n===5 ? 8 : 9);
 
     if(show.length===0){
       const msg = sf==='all' ? `No ${curDraw} draws yet — add one above` : `No ${sf} results for ${curDraw}`;
@@ -2628,7 +2550,7 @@ function renderGame(game){
     const primary   = bestPerPos.map(bp=>bp[0]).join('-');
     const absentStr = absentDisplay.length>0?absentDisplay.slice(0,10).join(', ')+(absentDisplay.length>10?'...':''):'none';
     const pendList    = pending.map(e=>e.state).join(', ')||'—';
-    const numOkSnap   = (game==='pick5'||game==='pick6') ? isNum49 : isDigit;
+    const numOkSnap   = (game==='pick5'||game==='cash5'||game==='lotto') ? isNum49 : isDigit;
     const partialList = partial.map(e=>`${e.state}(${e.nums.filter(d=>numOkSnap(d)).length}/${n})`).join(', ')||'—';
     const p1hotK    = pos[0] ? [...Array(poolSize).keys()].sort((a,b)=>pos[0][b]-pos[0][a])[0] : 0;
     const p1hotDisp = isNumGame ? p1hotK+1 : p1hotK;
@@ -2696,7 +2618,6 @@ function computeFreqFromEntries(entries, n, poolSize, isNumGame, decay){
 function renderJackpot(game){
   if(game==='powerball')    renderPowerball();
   else if(game==='megamillions') renderMega();
-  else if(game==='lucky5')  renderLucky5();
 }
 
 function freqMapHtml(freq, buckets){
@@ -2793,72 +2714,7 @@ function renderMega(){
   document.getElementById('mm-mbfreq').innerHTML=freqMapHtml(mbFreq,25);
 }
 
-function renderLucky5(){
-  const entries=APP.lucky5.entries;
-  const sbEl   =document.getElementById('l5-scoreboard');
-  const freqEl =document.getElementById('l5-freq');
-  const megaEl =document.getElementById('l5-megafreq');
-  const setEl  =(id,v)=>{ const e=document.getElementById(id); if(e) e.textContent=v; };
-
-  // ── live clock in summary banner ─────────────────────────────
-  const clockEl=document.getElementById('l5-s-clock');
-  if(clockEl){
-    const now=new Date();
-    clockEl.textContent=now.toLocaleString('en-US',{timeZone:'America/New_York',month:'2-digit',day:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' ET';
-  }
-
-  if(entries.length===0){
-    if(sbEl)   sbEl.innerHTML  ='<div class="text-muted" style="padding:8px">No draws yet.</div>';
-    if(freqEl) freqEl.innerHTML='<div class="text-muted" style="padding:8px">Add draws to see frequency.</div>';
-    if(megaEl) megaEl.innerHTML='<div class="text-muted" style="padding:8px">Add draws to see frequency.</div>';
-    setEl('l5-s-draws','0'); setEl('l5-s-hot','—'); setEl('l5-s-hotmega','—'); setEl('l5-s-absent','0');
-    return;
-  }
-
-  // ── frequency maps ──────────────────────────────────────────
-  const wbFreq={}, mgFreq={};
-  entries.forEach(e=>{
-    e.nums.forEach(n=>{ wbFreq[n]=(wbFreq[n]||0)+1; });
-    if(e.mega) mgFreq[e.mega]=(mgFreq[e.mega]||0)+1;
-  });
-
-  // ── scoreboard rows (grouped display: state | date time | balls | bonus | ✕) ──
-  if(sbEl) sbEl.innerHTML=
-    '<div style="display:flex;flex-direction:column;gap:0">'+
-    '<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:2px solid var(--border);font-size:.68rem;color:var(--muted);font-weight:700">'+
-      '<span style="width:38px">State</span>'+
-      '<span style="width:130px">Date</span>'+
-      '<span style="flex:1">Balls</span>'+
-      '<span style="width:52px">Bonus</span>'+
-    '</div>'+
-    entries.map((e,i)=>{
-      const stLbl = e.state||'—';
-      const dtLbl = e.date ? `${e.date}` : '';
-      const tmLbl = e.time || e.ts || '';
-      return `
-      <div style="display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border);flex-wrap:wrap">
-        <span style="width:38px;font-size:.78rem;font-weight:700;color:var(--accent)">${stLbl}</span>
-        <span style="width:130px;font-size:.68rem;color:var(--muted);white-space:nowrap">${dtLbl}<br><span style="color:var(--accent2)">${tmLbl}</span></span>
-        <span style="display:flex;gap:4px;flex-wrap:wrap;flex:1">${e.nums.map(n=>bigBallHtml(n,'wb')).join('')}</span>
-        ${bigBallHtml(e.mega,'slmega')}
-        <button class="btn btn-danger" style="padding:2px 6px;font-size:.68rem;margin-left:4px" onclick="removeJackpot('lucky5',${i})">✕</button>
-      </div>`;
-    }).join('')+'</div>';
-
-  // ── summary stats ─────────────────────────────────────────────
-  const hotWB  = Object.keys(wbFreq).sort((a,b)=>wbFreq[b]-wbFreq[a])[0]||'—';
-  const hotMega= Object.keys(mgFreq).sort((a,b)=>mgFreq[b]-mgFreq[a])[0]||'—';
-  const absentWB=[]; for(let i=1;i<=50;i++) if(!wbFreq[i]) absentWB.push(i);
-
-  setEl('l5-s-draws',   entries.length);
-  setEl('l5-s-hot',     hotWB !=='—' ? `${hotWB} (${wbFreq[hotWB]}×)`   : '—');
-  setEl('l5-s-hotmega', hotMega!=='—' ? `${hotMega} (${mgFreq[hotMega]}×)` : '—');
-  setEl('l5-s-absent',  absentWB.length+' of 50');
-
-  // ── frequency displays ────────────────────────────────────────
-  if(freqEl) freqEl.innerHTML=freqMapHtml(wbFreq,50);
-  if(megaEl) megaEl.innerHTML=freqMapHtml(mgFreq,27);
-}
+// renderLucky5 removed — SuperLotto Plus now under 'lotto' tab
 
 // ════════════════════════════════════════════════════════════
 //  KEYBOARD: Enter submits current active game form
@@ -2869,9 +2725,8 @@ document.addEventListener('keydown', e=>{
     if(g==='pick3')   addPick3();
     else if(g==='pick4')   addPickN('pick4',4);
     else if(g==='pick5')   addPickN('pick5',5);
-    else if(g==='pick6')   addPickN('pick6',6);
-    else if(g==='cash3')   addGeneric3('cash3');
-    else if(g==='daily3')  addGeneric3('daily3');
+    else if(g==='cash5')   addPickN('cash5',5);
+    else if(g==='lotto')   addPickN('lotto',6);
   }
 });
 
@@ -2906,7 +2761,7 @@ document.addEventListener('keydown', e=>{
 // ════════════════════════════════════════════════════════════
 if(loadState()){
   // Restore from localStorage — re-render all panels
-  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){
+  ['pick3','pick4','pick5','cash5','lotto'].forEach(function(g){
     renderGame(g);
     var panel = document.getElementById('panel-'+g);
     if(panel){
@@ -2916,7 +2771,7 @@ if(loadState()){
       });
     }
   });
-  ['powerball','megamillions','lucky5'].forEach(function(g){ renderJackpot(g); });
+  ['powerball','megamillions'].forEach(function(g){ renderJackpot(g); });
   _lastDataUpdate = new Date();
   console.log('[Scoreboard] Restored ' + todayET() + ' from localStorage');
   // Re-fetch after a short delay to pick up any draws that came in since last save
@@ -2928,8 +2783,8 @@ if(loadState()){
   console.log('[Scoreboard] First load ' + todayET() + ' — auto-fetching live data');
   APP.date = todayET();
   // Render empty boards immediately so the UI is visible while fetching
-  ['pick3','pick4','pick5','pick6','cash3','daily3'].forEach(function(g){ renderGame(g); });
-  ['powerball','megamillions','lucky5'].forEach(function(g){ renderJackpot(g); });
+  ['pick3','pick4','pick5','cash5','lotto'].forEach(function(g){ renderGame(g); });
+  ['powerball','megamillions'].forEach(function(g){ renderJackpot(g); });
   // Trigger live fetch after DOM settles (100 ms delay)
   setTimeout(function(){ fetchLiveAndRender(); }, 100);
 
@@ -3060,74 +2915,26 @@ window._restorePreload_3_22_2026 = function(){
 })();
 
 // ════════════════════════════════════════════════════════════
-//  PRE-LOAD PICK 6 — 3/22/2026
+//  PRE-LOAD LOTTO — 3/22/2026 (archived)
 // ════════════════════════════════════════════════════════════
-(function preloadPick6(){
-  // PICK 6 - 3/22/2026 (Sunday) - NO DRAWS TODAY
-  // NJ Pick6: Mon/Wed/Thu only. NY: Wed/Sat only. PA Match6: Mon/Wed/Sat only.
-  // CT Classic Lotto / MA Megabucks: Wed/Sat only. Next draws: Mon 3/23/2026.
+(function preloadLotto(){
+  // Lotto games typically draw 2-3x/week. Placeholder entries for reference.
   var demo=[
-    {state:'NJ', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
-    {state:'NY', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
-    {state:'PA', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
-    {state:'CT', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
-    {state:'MA', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'midday', ts:'3/22/2026'},
+    {state:'NY', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'evening', ts:'3/22/2026'},
+    {state:'FL', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'evening', ts:'3/22/2026'},
+    {state:'TX', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'evening', ts:'3/22/2026'},
+    {state:'IL', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'evening', ts:'3/22/2026'},
+    {state:'NJ', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'evening', ts:'3/22/2026'},
+    {state:'PA', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'evening', ts:'3/22/2026'},
+    {state:'CA', nums:['?','?','?','?','?','?'], wb:'', status:'pending', draw:'evening', ts:'3/22/2026'},
   ];
-  demo.forEach(function(e){ APP.pick6.entries.push(e); });
-  APP.pick6.draw='midday';
-  renderGame('pick6');
+  demo.forEach(function(e){ APP.lotto.entries.push(e); });
+  APP.lotto.draw='evening';
+  renderGame('lotto');
 })();
 
-// ════════════════════════════════════════════════════════════
-//  PRE-LOAD CASH 3 — 3/22/2026
-// ════════════════════════════════════════════════════════════
-(function preloadCash3(){
-  // GA Cash3 Midday 12:29PM: 1-6-8 (lotteryusa / lottostrategies ✓)
-  // TN Cash3: no midday draw on Sundays
-  // FL Pick3 Midday 1:30PM: 9-8-5 (lotteryusa FL pick3 midday ✓)
-  // GA Cash3 Evening 6:59PM: 1-2-7 (lotteryusa / lotterypost ✓)
-  // TN Cash3 Evening 6:28PM CT: 4-7-0 (lotteryusa ✓)
-  // FL Pick3 Evening 9:45PM: 6-7-6 (lotteryusa ✓)
-  // GA Cash3 Night 11:34PM: 5-5-1 (lotteryusa GA cash-3-night ✓)
-  var demo=[
-    {state:'GA', nums:['1','6','8'], wb:'', status:'confirmed', draw:'midday',  ts:'3/22/2026'}, // lotteryusa GA cash3 midday ✓
-    {state:'TN', nums:['?','?','?'], wb:'', status:'pending',   draw:'midday',  ts:'3/22/2026'}, // no Sunday midday draw
-    {state:'FL', nums:['9','8','5'], wb:'', status:'confirmed', draw:'midday',  ts:'3/22/2026'}, // lotteryusa FL pick3 midday ✓
-    // Evening 3/22/2026
-    {state:'GA', nums:['1','2','7'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa GA cash3 evening ✓
-    {state:'TN', nums:['4','7','0'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa TN cash3 evening ✓
-    {state:'FL', nums:['6','7','6'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa FL pick3 evening ✓
-    // Night 3/22/2026
-    {state:'GA', nums:['5','5','1'], wb:'', status:'confirmed', draw:'night',   ts:'3/22/2026'}, // lotteryusa GA cash3 night ✓
-  ];
-  demo.forEach(function(e){ APP.cash3.entries.push(e); });
-  APP.cash3.draw='midday';
-  renderGame('cash3');
-})();
-
-// ════════════════════════════════════════════════════════════
-//  PRE-LOAD DAILY 3 — 3/22/2026
-// ════════════════════════════════════════════════════════════
-(function preloadDaily3(){
-  // MI Daily3 Midday 12:59PM: 8-9-0 (lotteryusa / lottostrategies ✓)
-  // IN Daily3 Midday 1:20PM: 9-9-1 SB:9 (lotterypost IN daily3 ✓)
-  // IL Pick3 Midday 12:40PM: 1-2-2 FB:7 (illinoislottery.com / lotteryusa ✓)
-  // MI Daily3 Evening 7:29PM: 2-7-5 (lotterycorner / lottoedge ✓)
-  // IN Daily3 Evening 11:00PM: 0-6-5 SB:0 (lotteryusa ✓)
-  // IL Pick3 Evening 9:22PM: 7-5-7 FB:0 (illinoislottery.com snippet ✓)
-  var demo=[
-    {state:'MI', nums:['8','9','0'], wb:'', status:'confirmed', draw:'midday',  ts:'3/22/2026'}, // lotteryusa MI daily3 midday ✓
-    {state:'IN', nums:['9','9','1'], wb:'9', status:'confirmed', draw:'midday', ts:'3/22/2026'}, // lotterypost IN daily3 midday ✓
-    {state:'IL', nums:['1','2','2'], wb:'7', status:'confirmed', draw:'midday', ts:'3/22/2026'}, // illinoislottery.com ✓
-    // Evening 3/22/2026
-    {state:'MI', nums:['2','7','5'], wb:'', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotterycorner MI daily3 evening ✓
-    {state:'IN', nums:['0','6','5'], wb:'0', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // lotteryusa IN Daily3 evening ✓
-    {state:'IL', nums:['7','5','7'], wb:'0', status:'confirmed', draw:'evening', ts:'3/22/2026'}, // illinoislottery.com ✓
-  ];
-  demo.forEach(function(e){ APP.daily3.entries.push(e); });
-  APP.daily3.draw='midday';
-  renderGame('daily3');
-})();
+// (Cash3 preload removed — consolidated into pick3 tab)
+// (Daily3 preload removed — consolidated into pick3 tab)
 
 // ════════════════════════════════════════════════════════════
 //  PRE-LOAD POWERBALL — recent draws
@@ -3159,21 +2966,7 @@ window._restorePreload_3_22_2026 = function(){
   renderJackpot('megamillions');
 })();
 
-// ════════════════════════════════════════════════════════════
-//  PRE-LOAD 5+BONUS — CA SuperLotto Plus recent draws
-// ════════════════════════════════════════════════════════════
-(function preloadLucky5(){
-  var draws=[
-    {state:'CA', date:'03/14/2026', time:'7:57 PM', nums:[10,15,16,21,33], mega:6},
-    {state:'CA', date:'03/11/2026', time:'7:57 PM', nums:[15,17,25,29,45], mega:11},
-    {state:'CA', date:'03/07/2026', time:'7:57 PM', nums:[2,22,34,35,44],  mega:3},
-    {state:'CA', date:'03/04/2026', time:'7:57 PM', nums:[7,8,32,43,47],   mega:3},
-    {state:'CA', date:'02/11/2026', time:'7:57 PM', nums:[3,5,7,8,46],     mega:17},
-    {state:'CA', date:'02/07/2026', time:'7:57 PM', nums:[4,19,22,33,43],  mega:12},
-  ];
-  draws.forEach(function(d){ APP.lucky5.entries.push({state:d.state, date:d.date, time:d.time, nums:d.nums, mega:d.mega, ts:d.time}); });
-  renderJackpot('lucky5');
-})();
+// (Lucky5/5+Bonus preload removed — CA SuperLotto Plus now in lotto tab)
 
   // Persist fresh preload as today's baseline
   saveState();
@@ -3235,7 +3028,7 @@ window._restorePreload_3_22_2026 = function(){
     var game   = params.get('game') || (hash.split('-')[0]) || '';
     var draw   = params.get('draw') || (hash.split('-')[1]) || 'evening';
     var auto   = params.get('auto') || '';
-    var validGames = ['pick3','pick4','pick5','pick6','cash3','daily3','powerball','megamillions','lucky5'];
+    var validGames = ['pick3','pick4','pick5','cash5','lotto','powerball','megamillions'];
     if(validGames.includes(game)){
       var btn = document.querySelector('[data-game="'+game+'"]');
       if(btn) switchGame(game, btn);
