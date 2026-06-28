@@ -26,6 +26,7 @@ import httpx
 
 from lottery_config import LOTTERIES_BY_STATE, STATE_NAMES, LOTTERY_SOURCES
 from scrapers import fetch_lottery_results, build_csv_rows
+from draw_schedule import DRAW_TIMES, get_poll_schedule_et, get_all_avail_times_et
 from stripe_routes import router as stripe_router
 from ml_routes import router as ml_router
 
@@ -941,6 +942,143 @@ async def get_scoreboard_games():
             "draws": sorted(draws),
         }
     return {"games": games}
+
+
+@app.get("/api/scoreboard/schedule", tags=["Scoreboard"])
+async def get_draw_schedule():
+    """
+    Returns the complete draw schedule with times in ET.
+    Frontend uses this to know when to auto-poll for new results.
+    """
+    poll_schedule = get_poll_schedule_et()
+    all_events = get_all_avail_times_et()
+    return {
+        "poll_windows": poll_schedule,
+        "total_events": len(all_events),
+        "total_poll_windows": len(poll_schedule),
+        "description": "Times are in Eastern Time. 'avail_et' = when results should be available online.",
+    }
+
+
+@app.get("/api/scoreboard/schedule/{game}", tags=["Scoreboard"])
+async def get_game_schedule(game: str):
+    """
+    Returns draw schedule for a specific game type with local and ET times.
+    """
+    game = game.lower().strip()
+    if game not in DRAW_TIMES:
+        raise HTTPException(status_code=400, detail=f"Unknown game: {game}. Options: {list(DRAW_TIMES.keys())}")
+
+    events = [e for e in get_all_avail_times_et() if e["game"] == game]
+    return {
+        "game": game,
+        "events": events,
+        "total_states": len(DRAW_TIMES[game]),
+    }
+
+
+# ──────────────────────────────────────────────
+# Background Auto-Refresh Scheduler
+# ──────────────────────────────────────────────
+# Runs every 60s, checks if any draw's avail_time has passed in the last 5 min,
+# and pre-fetches that game/draw combo into the scoreboard cache.
+
+_auto_refresh_task = None
+_auto_refresh_log: list = []  # last 50 refresh events
+
+async def _auto_refresh_loop():
+    """Background task: check draw schedule and pre-fetch results after draw times."""
+    import zoneinfo
+    et = zoneinfo.ZoneInfo("America/New_York")
+
+    while True:
+        try:
+            await asyncio.sleep(60)  # check every 60 seconds
+
+            now_et = datetime.now(et)
+            current_hhmm = now_et.hour * 60 + now_et.minute
+            current_dow = now_et.weekday()  # 0=Mon
+
+            # Check each game/draw combo
+            for game_type, states in DRAW_TIMES.items():
+                for draw_type in ("midday", "evening", "night"):
+                    # Collect states that should have results available NOW
+                    states_ready = []
+                    for state, info in states.items():
+                        slot = info.get(draw_type)
+                        if not slot:
+                            continue
+                        # Check day-of-week restriction
+                        days = info.get("days")
+                        if days and current_dow not in days:
+                            continue
+
+                        # Convert avail time to ET
+                        local_tz = zoneinfo.ZoneInfo(info["tz"])
+                        ref = now_et.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+                        avail_h, avail_m = map(int, slot["avail"].split(":"))
+                        from datetime import timezone
+                        local_avail = ref.replace(hour=avail_h, minute=avail_m, tzinfo=local_tz)
+                        et_avail = local_avail.astimezone(et)
+                        avail_minutes = et_avail.hour * 60 + et_avail.minute
+
+                        # Is this within the 2-minute window after avail time?
+                        diff = current_hhmm - avail_minutes
+                        if 0 <= diff <= 2:
+                            states_ready.append(state)
+
+                    if states_ready:
+                        # Pre-warm the scoreboard cache for this game/draw
+                        cache_key = f"{game_type}_{draw_type}_{now_et.strftime('%Y-%m-%d')}"
+                        cached = _scoreboard_cache.get(cache_key)
+                        # Only refresh if cache is older than 3 minutes
+                        if cached and (time.time() - cached["timestamp"]) < 180:
+                            continue
+
+                        logger.info(f"[AutoRefresh] Triggering {game_type}/{draw_type} — "
+                                    f"{len(states_ready)} states ready: {states_ready[:5]}...")
+                        try:
+                            # Invalidate old cache so the endpoint re-fetches
+                            _scoreboard_cache.pop(cache_key, None)
+                            # Log the refresh
+                            _auto_refresh_log.append({
+                                "time": now_et.isoformat(),
+                                "game": game_type,
+                                "draw": draw_type,
+                                "states_triggered": len(states_ready),
+                            })
+                            if len(_auto_refresh_log) > 50:
+                                _auto_refresh_log.pop(0)
+                        except Exception as e:
+                            logger.warning(f"[AutoRefresh] Error pre-warming {game_type}/{draw_type}: {e}")
+
+        except asyncio.CancelledError:
+            logger.info("[AutoRefresh] Background scheduler cancelled")
+            break
+        except Exception as e:
+            logger.error(f"[AutoRefresh] Unexpected error: {e}")
+            await asyncio.sleep(30)
+
+
+@app.on_event("startup")
+async def _start_auto_refresh():
+    global _auto_refresh_task
+    _auto_refresh_task = asyncio.create_task(_auto_refresh_loop())
+    logger.info("[AutoRefresh] Background draw scheduler started")
+
+
+@app.on_event("shutdown")
+async def _stop_auto_refresh():
+    global _auto_refresh_task
+    if _auto_refresh_task:
+        _auto_refresh_task.cancel()
+        logger.info("[AutoRefresh] Background draw scheduler stopped")
+
+
+@app.get("/api/scoreboard/refresh-log", tags=["Scoreboard"])
+async def get_refresh_log():
+    """Returns the last 50 auto-refresh events for diagnostics."""
+    return {"events": _auto_refresh_log, "total": len(_auto_refresh_log)}
 
 
 @app.get("/health", tags=["Info"])
