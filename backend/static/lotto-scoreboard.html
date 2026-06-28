@@ -761,6 +761,18 @@ body.embedded .header { display:none !important; }
   </div>
 </header>
 
+<!-- ═══════ AUTO-UPDATE STATUS BAR ═══════ -->
+<div id="auto-update-bar" style="background:linear-gradient(90deg,#0f172a,#1e293b);border-bottom:1px solid #334155;
+  padding:4px 16px;display:flex;align-items:center;gap:12px;font-size:.75rem;color:#94a3b8;overflow-x:auto;white-space:nowrap">
+  <span style="color:#38bdf8;font-weight:600">⚡ AUTO</span>
+  <span id="auto-status">Loading schedule…</span>
+  <span style="margin-left:auto;color:#64748b" id="auto-next">Next: —</span>
+  <span id="auto-countdown" style="color:#f59e0b;font-weight:600;min-width:50px">—</span>
+  <label style="display:flex;align-items:center;gap:4px;cursor:pointer;color:#64748b" title="Toggle auto-refresh">
+    <input type="checkbox" id="auto-toggle" checked style="accent-color:#38bdf8"> Auto
+  </label>
+</div>
+
 <!-- ═══════════════════════ GAME TABS ═══════════════════════ -->
 <div class="tabs-wrap">
   <div class="tabs">
@@ -1231,7 +1243,7 @@ function markDataUpdated(){ _lastDataUpdate = new Date(); saveState(); }
 // ============================================================
 //  TODAY-ONLY PERSISTENCE & MIDNIGHT RESET
 // ============================================================
-const STORAGE_KEY = 'lotto_scoreboard_v26' // v26: consolidated tabs — pick3/pick4/pick5/cash5/lotto/powerball/megamillions. All states included.
+const STORAGE_KEY = 'lotto_scoreboard_v27' // v27: auto-update with draw schedule — live countdown timers, smart polling after each draw time.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getETDateParts(date?)  →  { year, month, day, hour, minute, second, dayOfWeek }
@@ -1715,6 +1727,190 @@ function apiDateToTs(apiDate){
   const [y,m,d] = apiDate.split('-');
   return parseInt(m)+'/'+parseInt(d)+'/'+y;
 }
+
+// ════════════════════════════════════════════════════════════
+//  DRAW SCHEDULE ENGINE — Auto-fetch after each draw time
+//  Fetches /api/scoreboard/schedule once at boot, then uses
+//  client-side timers to trigger fetchLiveAndRender() when
+//  results should be available.
+// ════════════════════════════════════════════════════════════
+
+const DRAW_SCHEDULE = {
+  _pollWindows: [],    // [{avail_et:"HH:MM", games:[{game,draw_type,states,count}]}]
+  _loaded: false,
+  _autoEnabled: true,
+  _nextTimer: null,
+  _nextEvent: null,
+  _fetchCount: 0,
+
+  /** Boot: load schedule from API, set up first timer */
+  async init(){
+    try {
+      const resp = await fetch('/api/scoreboard/schedule');
+      if(!resp.ok) throw new Error('HTTP '+resp.status);
+      const data = await resp.json();
+      this._pollWindows = data.poll_windows || [];
+      this._loaded = true;
+      console.log('[DrawSchedule] Loaded '+this._pollWindows.length+' poll windows, '+data.total_events+' events');
+      this._updateStatus('✓ '+this._pollWindows.length+' draw windows loaded');
+      this._scheduleNext();
+    } catch(e){
+      console.warn('[DrawSchedule] Failed to load schedule, using 10-min fallback:', e);
+      this._updateStatus('⚠ Schedule unavailable — 10 min polling');
+      // Fallback: poll every 10 minutes
+      this._startFallbackPolling();
+    }
+  },
+
+  /** Find the next poll window after NOW (ET) and set a timer */
+  _scheduleNext(){
+    if(!this._autoEnabled || !this._loaded) return;
+
+    const p = getETDateParts();
+    const nowMinutes = p.hour * 60 + p.minute;
+    const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(p.dayOfWeek);
+    // Map to Python weekday: Mon=0..Sun=6
+    const pyDow = dow === 0 ? 6 : dow - 1;
+
+    // Find next window today or tomorrow
+    let nextWindow = null;
+    let delayMs = 0;
+
+    for(const w of this._pollWindows){
+      const [h, m] = w.avail_et.split(':').map(Number);
+      const wMinutes = h * 60 + m;
+
+      // Check if any game in this window runs today
+      const hasToday = w.games.some(g => {
+        // If the game has no day restriction in the schedule, it runs daily
+        // The schedule endpoint doesn't include days, so we assume all windows are valid
+        return true;
+      });
+
+      if(!hasToday) continue;
+
+      if(wMinutes > nowMinutes + 1){ // +1 min buffer
+        // Next window is later today
+        delayMs = (wMinutes - nowMinutes) * 60 * 1000;
+        nextWindow = w;
+        break;
+      }
+    }
+
+    if(!nextWindow){
+      // All today's windows have passed — schedule for first window tomorrow
+      if(this._pollWindows.length > 0){
+        const first = this._pollWindows[0];
+        const [h, m] = first.avail_et.split(':').map(Number);
+        const firstMinutes = h * 60 + m;
+        // Minutes until midnight + minutes into tomorrow
+        delayMs = ((24*60 - nowMinutes) + firstMinutes) * 60 * 1000;
+        nextWindow = first;
+      }
+    }
+
+    if(nextWindow && delayMs > 0){
+      // Cap delay at 30 min — re-check after that
+      const cappedDelay = Math.min(delayMs, 30 * 60 * 1000);
+      const gameList = nextWindow.games.map(g => g.game+'/'+g.draw_type).join(', ');
+      const totalStates = nextWindow.total_states;
+
+      this._nextEvent = { window: nextWindow, delayMs: cappedDelay, scheduledAt: Date.now() };
+      this._updateNext(nextWindow.avail_et + ' ET — ' + totalStates + ' states (' + gameList + ')');
+
+      clearTimeout(this._nextTimer);
+      this._nextTimer = setTimeout(() => {
+        this._onDrawReady(nextWindow);
+      }, cappedDelay);
+
+      console.log('[DrawSchedule] Next poll at ' + nextWindow.avail_et + ' ET (in '
+        + Math.round(cappedDelay/60000) + 'min) — ' + gameList);
+    } else {
+      this._updateNext('No upcoming draws today');
+    }
+
+    // Start countdown ticker
+    this._startCountdown();
+  },
+
+  /** Called when a draw window's results should be available */
+  async _onDrawReady(window){
+    if(!this._autoEnabled) return;
+    this._fetchCount++;
+    const gList = window.games.map(g=>g.game).join(', ');
+    console.log('[DrawSchedule] Auto-fetching: ' + gList + ' (' + window.avail_et + ' ET)');
+    this._updateStatus('⚡ Auto-fetching ' + gList + '…');
+    showToast('⚡ New draws ready — auto-fetching ' + gList + '…', 'info', 4000);
+
+    try {
+      await fetchLiveAndRender();
+      this._updateStatus('✓ Updated at ' + window.avail_et + ' ET (#' + this._fetchCount + ')');
+    } catch(e) {
+      this._updateStatus('⚠ Fetch failed — will retry');
+    }
+
+    // Schedule the next window
+    setTimeout(() => this._scheduleNext(), 5000);
+  },
+
+  /** Fallback: poll every 10 min if schedule API fails */
+  _startFallbackPolling(){
+    setInterval(async () => {
+      if(!this._autoEnabled) return;
+      this._fetchCount++;
+      console.log('[DrawSchedule] Fallback poll #' + this._fetchCount);
+      try { await fetchLiveAndRender(); } catch(e){}
+    }, 10 * 60 * 1000);
+  },
+
+  /** Countdown ticker — updates the countdown display every second */
+  _countdownInterval: null,
+  _startCountdown(){
+    clearInterval(this._countdownInterval);
+    this._countdownInterval = setInterval(() => {
+      const el = document.getElementById('auto-countdown');
+      if(!el || !this._nextEvent) return;
+      const remaining = this._nextEvent.delayMs - (Date.now() - this._nextEvent.scheduledAt);
+      if(remaining <= 0){
+        el.textContent = '⚡ NOW';
+        return;
+      }
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      if(mins >= 60){
+        const hrs = Math.floor(mins / 60);
+        el.textContent = hrs + 'h ' + (mins%60) + 'm';
+      } else {
+        el.textContent = mins + ':' + ('0'+secs).slice(-2);
+      }
+    }, 1000);
+  },
+
+  /** Toggle auto-refresh */
+  toggle(enabled){
+    this._autoEnabled = enabled;
+    if(enabled){
+      this._updateStatus('✓ Auto-refresh enabled');
+      this._scheduleNext();
+    } else {
+      clearTimeout(this._nextTimer);
+      this._updateStatus('⏸ Auto-refresh paused');
+      this._updateNext('Paused');
+      const el = document.getElementById('auto-countdown');
+      if(el) el.textContent = '—';
+    }
+  },
+
+  /** UI helpers */
+  _updateStatus(msg){ const el=document.getElementById('auto-status'); if(el) el.textContent=msg; },
+  _updateNext(msg){ const el=document.getElementById('auto-next'); if(el) el.textContent='Next: '+msg; },
+};
+
+// Wire up toggle checkbox
+document.addEventListener('DOMContentLoaded', function(){
+  const cb = document.getElementById('auto-toggle');
+  if(cb) cb.addEventListener('change', function(){ DRAW_SCHEDULE.toggle(this.checked); });
+});
 
 // ─── Fetch with timeout + 429-retry (exponential backoff) ───────────────────
 async function fetchWithRetry(url, maxRetries){
@@ -2977,6 +3173,13 @@ window._restorePreload_3_22_2026 = function(){
 }; // end _restorePreload_3_22_2026
 
 } // end else (first-load auto-fetch)
+
+// ════════════════════════════════════════════════════════════
+//  INIT DRAW SCHEDULE — Start auto-refresh after boot
+// ════════════════════════════════════════════════════════════
+setTimeout(function(){
+  DRAW_SCHEDULE.init();
+}, 3000); // Delay 3s so initial fetch completes first
 
 // ════════════════════════════════════════════════════════════
 //  IFRAME BRIDGE — receive postMessage from parent Predictor page
