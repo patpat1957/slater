@@ -1243,7 +1243,7 @@ function markDataUpdated(){ _lastDataUpdate = new Date(); saveState(); }
 // ============================================================
 //  TODAY-ONLY PERSISTENCE & MIDNIGHT RESET
 // ============================================================
-const STORAGE_KEY = 'lotto_scoreboard_v27' // v27: auto-update with draw schedule — live countdown timers, smart polling after each draw time.
+const STORAGE_KEY = 'lotto_scoreboard_v28' // v28: use /api/scoreboard cached endpoint — 10x faster loading (12 API calls vs 43 raw extracts).
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getETDateParts(date?)  →  { year, month, day, hour, minute, second, dayOfWeek }
@@ -1936,64 +1936,6 @@ async function fetchWithRetry(url, maxRetries){
   return null;
 }
 
-// ─── Build a reverse-lookup: lotteryId → {game, drawType, state} ─────────────
-function buildIdIndex(){
-  const idx = {};
-  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
-  for(const game of pickGames){
-    const map = LIVE_FETCH[game];
-    if(!map) continue;
-    for(const drawType of ['midday','evening','night']){
-      const items = map[drawType];
-      if(!items) continue;
-      for(const item of items){
-        idx[item.id] = { game, drawType, state: item.state };
-      }
-    }
-  }
-  // Jackpot games
-  for(const game of ['powerball','megamillions']){
-    const items = LIVE_FETCH[game];
-    if(!items) continue;
-    for(const item of items){
-      idx[item.id] = { game, drawType: 'jackpot', state: item.state };
-    }
-  }
-  return idx;
-}
-
-// ─── Group all lottery IDs by state for batched API calls ────────────────────
-// Returns: Map<stateCode, {ids:[...], fromDate, toDate}>
-function buildStateBatches(fromDate, toDate, jackpotFromDate){
-  const batches = {};  // state → {ids, fromDate}
-
-  function addId(state, id, from){
-    const sc = (state === 'US') ? 'NY' : state;  // US jackpots use NY as state_code
-    if(!batches[sc]) batches[sc] = { ids: [], from: from||fromDate };
-    if(!batches[sc].ids.includes(id)) batches[sc].ids.push(id);
-    // Use the earlier of the two from-dates for this state
-    if(from && from < batches[sc].from) batches[sc].from = from;
-  }
-
-  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
-  for(const game of pickGames){
-    const map = LIVE_FETCH[game];
-    if(!map) continue;
-    for(const drawType of ['midday','evening','night']){
-      const items = map[drawType];
-      if(!items) continue;
-      for(const item of items) addId(item.state, item.id, fromDate);
-    }
-  }
-  for(const game of ['powerball','megamillions']){
-    const items = LIVE_FETCH[game];
-    if(!items) continue;
-    for(const item of items) addId(item.state, item.id, jackpotFromDate);
-  }
-
-  return batches;
-}
-
 // ─── Main live-fetch and re-render ────────────────────────────────────────────
 // v25: Parallel fetch with concurrency limit — all states fetched simultaneously
 async function fetchLiveAndRender(){
@@ -2017,139 +1959,108 @@ async function fetchLiveAndRender(){
 }
 
 async function _doFetchLiveAndRender(btn){
-  const toDate          = apiDateStr(0);
-  const fromDate        = apiDateStr(3);    // look back 3 days for pick games
-  const jackpotFromDate = apiDateStr(30);   // look back 30 days for jackpots
-
   let fetched = 0, errors = 0;
 
-  // Build reverse index: lotteryId → {game, drawType, state}
-  const idIndex = buildIdIndex();
+  // v26: Use /api/scoreboard endpoint (server-side cache, ~0.2s per call)
+  // instead of raw /extract per state (~10s each). ~12 calls vs 43.
+  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
+  const drawTypes = ['midday','evening','night'];
 
-  // Build batches: state → {ids[], from}
-  const batches = buildStateBatches(fromDate, toDate, jackpotFromDate);
-
-  // Collect results by [game][drawType] → latestRow per lottery ID
-  // We keep the most-recent row per lottery ID
-  const latestByLid = {};  // lotteryId → array of rows (for jackpots, multiple rows)
-
-  // v25: Fire ALL state requests in parallel (Promise.all) instead of sequential.
-  // This cuts load time from ~70s to ~8-12s since each request takes ~3-5s.
-  const batchEntries = Object.entries(batches);
-  const CONCURRENCY = 5; // max 5 in-flight at once to respect rate limits
-
-  // Semaphore-based concurrency limiter
-  async function fetchBatch(stateCode, batch){
-    const idsParam = batch.ids.join(',');
-    const url = `/extract?state_code=${stateCode}&lottery_ids=${encodeURIComponent(idsParam)}&from_date=${batch.from}&to_date=${toDate}`;
-    try{
-      const resp = await fetchWithRetry(url, 3);
-      if(!resp || !resp.ok) return { ok:false };
-      const json = await resp.json();
-      return { ok:true, data: json.data || [] };
-    } catch(e){ return { ok:false }; }
+  // Build list of game+draw combos that have entries in LIVE_FETCH
+  const requests = [];
+  for(const game of pickGames){
+    const map = LIVE_FETCH[game];
+    if(!map) continue;
+    for(const draw of drawTypes){
+      if(map[draw] && map[draw].length) requests.push({game, draw, type:'pick'});
+    }
+  }
+  for(const game of ['powerball','megamillions']){
+    if(LIVE_FETCH[game] && LIVE_FETCH[game].length) requests.push({game, draw:'evening', type:'jackpot'});
   }
 
-  // Run with concurrency limit
-  async function runWithConcurrency(entries, limit){
+  // Fetch all in parallel with concurrency limit
+  const CONCURRENCY = 6;
+  async function fetchScoreboard(req){
+    const url = `/api/scoreboard?game=${req.game}&draw=${req.draw}`;
+    try{
+      const resp = await fetchWithRetry(url, 2);
+      if(!resp || !resp.ok) return { ok:false, req };
+      const json = await resp.json();
+      return { ok:true, req, data: json };
+    } catch(e){ return { ok:false, req }; }
+  }
+
+  async function runWithConcurrency(items, limit){
     const results = [];
     let idx = 0;
     async function worker(){
-      while(idx < entries.length){
+      while(idx < items.length){
         const i = idx++;
-        const [sc, batch] = entries[i];
-        results[i] = { stateCode: sc, result: await fetchBatch(sc, batch) };
+        results[i] = await fetchScoreboard(items[i]);
       }
     }
-    const workers = Array.from({length: Math.min(limit, entries.length)}, () => worker());
+    const workers = Array.from({length: Math.min(limit, items.length)}, () => worker());
     await Promise.all(workers);
     return results;
   }
 
-  const allResults = await runWithConcurrency(batchEntries, CONCURRENCY);
+  const allResults = await runWithConcurrency(requests, CONCURRENCY);
 
-  for(const {stateCode, result} of allResults){
-    if(!result.ok){ errors++; continue; }
-    if(!result.data.length) continue;
-    for(const row of result.data){
-      const lid = (row.Lottery_ID || '').toLowerCase().replace(/\s/g,'_');
-      if(!lid) continue;
-      if(!latestByLid[lid]) latestByLid[lid] = [];
-      latestByLid[lid].push(row);
-    }
-  }
+  // ── Process results ─────────────────────────────────────────────────────────
+  for(const res of allResults){
+    if(!res.ok){ errors++; continue; }
+    const {game, draw, type} = res.req;
+    const entries = res.data.entries || [];
+    if(!entries.length) continue;
 
-  // ── Process pick-style games ───────────────────────────────────────────────
-  const pickGames = ['pick3','pick4','pick5','cash5','lotto'];
-  for(const game of pickGames){
-    const map = LIVE_FETCH[game];
-    if(!map) continue;
-    for(const drawType of ['midday','evening','night']){
-      const items = map[drawType];
-      if(!items) continue;
+    if(type === 'pick'){
       const newEntries = [];
-      for(const item of items){
-        const rows = latestByLid[item.id];
-        if(!rows || !rows.length) continue;
-        // Sort descending by date; take latest
-        const row = rows.sort((a,b)=> b.Date.localeCompare(a.Date))[0];
-        const nums = [];
-        for(let i=1; i<=9; i++){
-          const v = row['Ball_'+i];
-          if(v===undefined || v===null || v==='') break;
-          nums.push(String(v));
-        }
-        if(!nums.length) continue;
-        const ts = apiDateToTs(row.Date);
-        newEntries.push({ state: item.state, nums, wb:'', status:'confirmed', draw: drawType, ts });
+      for(const entry of entries){
+        if(!entry.balls || !entry.balls.length) continue;
+        const ts = apiDateToTs(entry.date);
+        newEntries.push({
+          state: entry.state,
+          nums: entry.balls.map(String),
+          wb: entry.extra || '',
+          status: 'confirmed',
+          draw: draw,
+          ts: ts
+        });
       }
       if(newEntries.length){
         const newTs = newEntries.map(e=>e.ts);
-        // Remove stale entries for same draw that share a fetched date
         APP[game].entries = APP[game].entries.filter(e =>
-          !(e.draw===drawType && e.ts && e.ts.indexOf('/')!==-1 && newTs.includes(e.ts))
+          !(e.draw===draw && e.ts && e.ts.indexOf('/')!==-1 && newTs.includes(e.ts))
         );
         newEntries.forEach(e => APP[game].entries.push(e));
         fetched += newEntries.length;
       }
-    }
-    renderGame(game);
-  }
-
-  // ── Process jackpot games ─────────────────────────────────────────────────
-  for(const game of ['powerball','megamillions']){
-    const items = LIVE_FETCH[game];
-    if(!items) continue;
-    const newEntries = [];
-    for(const item of items){
-      const rows = latestByLid[item.id];
-      if(!rows || !rows.length) continue;
-      for(const row of rows.slice(0, 30)){
-        const nums = [];
-        for(let i=1; i<=9; i++){
-          const v = row['Ball_'+i];
-          if(v===undefined || v===null || v==='') break;
-          nums.push(parseInt(v));
-        }
-        if(!nums.length) continue;
-        const dateStr = apiDateToTs(row.Date);
+    } else if(type === 'jackpot'){
+      const newEntries = [];
+      for(const entry of entries){
+        if(!entry.balls || !entry.balls.length) continue;
+        const dateStr = apiDateToTs(entry.date);
+        const nums = entry.balls.map(v => parseInt(v));
+        const extra = parseInt(entry.extra || 0);
         if(game==='powerball'){
-          const pb = parseInt(row.Powerball || row.Ball_6 || 0);
-          newEntries.push({date:dateStr, nums, pb, pp:1, ts:''});
-        } else if(game==='megamillions'){
-          const mb = parseInt(row.Mega_Ball || row.Mega || row.Ball_6 || 0);
-          newEntries.push({date:dateStr, nums, mb, mp:1, ts:''});
+          newEntries.push({date:dateStr, nums, pb:extra, pp:1, ts:''});
+        } else {
+          newEntries.push({date:dateStr, nums, mb:extra, mp:1, ts:''});
         }
       }
+      if(newEntries.length){
+        const existingDates = new Set(APP[game].entries.map(e=>e.date));
+        newEntries.filter(e=>!existingDates.has(e.date)).forEach(e=>APP[game].entries.push(e));
+        APP[game].entries.sort((a,b)=> new Date(b.date)-new Date(a.date));
+        fetched += newEntries.length;
+      }
     }
-    if(newEntries.length){
-      const existingDates = new Set(APP[game].entries.map(e=>e.date));
-      newEntries.filter(e=>!existingDates.has(e.date)).forEach(e=>APP[game].entries.push(e));
-      APP[game].entries.sort((a,b)=> new Date(b.date)-new Date(a.date));
-      fetched += newEntries.length;
-    }
-    renderJackpot(game);
   }
+
+  // Render all games
+  pickGames.forEach(g => renderGame(g));
+  ['powerball','megamillions'].forEach(g => renderJackpot(g));
 
   saveState();
 
